@@ -36,8 +36,9 @@
 - only conversation members may access the conversation
 - only authorized users should manage members
 - no duplicate direct conversations between two same users
-
-# conversation_members
+### rules
+when creating, set the last read id to null. That way there wont be an error.
+# conversation_members (pivot for users and conversations)
 ## table
 |id-> primary key|
 |user_id-> fk = users->id|
@@ -45,14 +46,18 @@
 |last_read_id -> fk=messages->id, nullable|
 |role -> enum owner, admin, member|
 |joined_at -> date|
-|left_at -> date, nullable|
+|left_at -> date, nullable| ->will delete after 10 days after this is set
 |conversation_id + user_id = unique|
 ### endpoints
 - managed through /api/conversations/{conversation}/members GET/POST/DELETE (see conversations)
 ### policies
 - only owner/admin may add, remove, or change the role of a member
 - a member may remove themself (leave); this should set left_at rather than deleting the row
-
+### behavior
+- if a user is deleted itll set to null
+- if a convo is deleted itll set to null
+- this way you can rejoin a convo.
+- if both are null, itll get deleted.
 # messages (employ soft deletion)
 ## table
 |id -> primary key|

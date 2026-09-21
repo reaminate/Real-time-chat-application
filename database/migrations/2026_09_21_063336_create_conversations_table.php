@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
             $table->enum('type', array_column(ConversationTypeEnum::cases(), 'value'))->default(ConversationTypeEnum::DIRECT->value);
-            $table->string('name');
+            $table->string('name')->nullable();
             $table->foreignId('created_by')->constrained('users', 'id')->cascadeOnDelete();
             $table->timestamps();
         });

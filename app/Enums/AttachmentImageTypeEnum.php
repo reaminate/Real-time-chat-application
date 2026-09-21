@@ -4,7 +4,6 @@ namespace App\Enums;
 
 enum AttachmentImageTypeEnum: string
 {
-    case PNG = 'png';
-    case JPG = 'jpg';
-    case JPEG = 'jpeg';
+    case PNG = 'image/png';
+    case JPEG = 'image/jpeg';
 }

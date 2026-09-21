@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\conversation_member;
-use App\Http\Requests\Storeconversation_memberRequest;
-use App\Http\Requests\Updateconversation_memberRequest;
+use AppModelsConversationMember;
+use App\Http\Requests\StoreConversationMemberRequest;
+use App\Http\Requests\UpdateConversationMemberRequest;
 
 class ConversationMemberController extends Controller
 {
@@ -19,7 +19,7 @@ class ConversationMemberController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Storeconversation_memberRequest $request)
+    public function store(StoreConversationMemberRequest $request)
     {
         //
     }
@@ -27,7 +27,7 @@ class ConversationMemberController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(conversation_member $conversation_member)
+    public function show(ConversationMember $conversationMember)
     {
         //
     }
@@ -35,7 +35,7 @@ class ConversationMemberController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Updateconversation_memberRequest $request, conversation_member $conversation_member)
+    public function update(UpdateConversationMemberRequest $request, ConversationMember $conversationMember)
     {
         //
     }
@@ -43,7 +43,7 @@ class ConversationMemberController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(conversation_member $conversation_member)
+    public function destroy(ConversationMember $conversationMember)
     {
         //
     }

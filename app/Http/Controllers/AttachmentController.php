@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\attachment;
-use App\Http\Requests\StoreattachmentRequest;
-use App\Http\Requests\UpdateattachmentRequest;
+use AppModels\uattachment;
+use App\Http\Requests\StoreAttachmentRequest;
+use App\Http\Requests\UpdateAttachmentRequest;
 
 class AttachmentController extends Controller
 {
@@ -19,7 +19,7 @@ class AttachmentController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreattachmentRequest $request)
+    public function store(StoreAttachmentRequest $request)
     {
         //
     }
@@ -27,7 +27,7 @@ class AttachmentController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(attachment $attachment)
+    public function show(Attachment $attachment)
     {
         //
     }
@@ -35,7 +35,7 @@ class AttachmentController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateattachmentRequest $request, attachment $attachment)
+    public function update(UpdateAttachmentRequest $request, Attachment $attachment)
     {
         //
     }
@@ -43,7 +43,7 @@ class AttachmentController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(attachment $attachment)
+    public function destroy(Attachment $attachment)
     {
         //
     }

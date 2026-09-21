@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\message;
-use App\Http\Requests\StoremessageRequest;
-use App\Http\Requests\UpdatemessageRequest;
+use AppModels\umessage;
+use App\Http\Requests\StoreMessageRequest;
+use App\Http\Requests\UpdateMessageRequest;
 
 class MessageController extends Controller
 {
@@ -19,7 +19,7 @@ class MessageController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoremessageRequest $request)
+    public function store(StoreMessageRequest $request)
     {
         //
     }
@@ -27,7 +27,7 @@ class MessageController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(message $message)
+    public function show(Message $message)
     {
         //
     }
@@ -35,7 +35,7 @@ class MessageController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdatemessageRequest $request, message $message)
+    public function update(UpdateMessageRequest $request, Message $message)
     {
         //
     }
@@ -43,7 +43,7 @@ class MessageController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(message $message)
+    public function destroy(Message $message)
     {
         //
     }

@@ -16,16 +16,11 @@ return new class extends Migration
     {
         Schema::create('attachments', function (Blueprint $table) {
             $table->id();
-            // polymorphic owner (user avatar / message file); also creates the index
             $table->morphs('attachable');
             $table->enum('collection', array_column(AttachmentCollectionEnum::cases(), 'value'));
             $table->string('original_name');
             $table->string('file_name');
-            $table->enum('mime_type', array_merge(
-                array_column(AttachmentImageTypeEnum::cases(), 'value'),
-                array_column(AttachmentFileTypeEnum::cases(), 'value'),
-            ));
-            // bytes; the 5 MB / 2 MB (avatar) limit is enforced in the Form Request
+            $table->string('mime_type');
             $table->unsignedInteger('size');
             $table->string('path');
             $table->timestamps();

@@ -4,6 +4,6 @@ namespace App\Enums;
 
 enum AttachmentFileTypeEnum: string
 {
-    case PDF = 'pdf';
-    case DOCX = 'docx';
+    case PDF = 'application/pdf';
+    case DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 }
