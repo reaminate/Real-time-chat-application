@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use AppModelsConversationMember;
+use App\Models\ConversationMember;
 use App\Http\Requests\StoreConversationMemberRequest;
 use App\Http\Requests\UpdateConversationMemberRequest;
 

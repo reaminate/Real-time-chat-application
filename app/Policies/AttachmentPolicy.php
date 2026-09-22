@@ -21,9 +21,15 @@ class AttachmentPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user): bool
+    public function view(User $user, Attachment $attachment): bool
     {
-        return true;
+        return match (true) {
+            $attachment->attachable instanceof User => true,
+            $attachment->attachable instanceof Message => $user->conversationMembers()
+                ->where('conversation_id', $attachment->attachable->conversation_id)
+                ->exists(),
+            default => false,
+        };
     }
 
     /**

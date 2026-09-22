@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\ConversationTypeEnum;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rules;
 
 class StoreConversationRequest extends FormRequest
 {
@@ -12,7 +16,7 @@ class StoreConversationRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -23,7 +27,10 @@ class StoreConversationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'type' => ['required', new Enum(ConversationTypeEnum::class)],
+            'name' => [Rule::requiredIf(function(){
+                return $this->input('type') === ConversationTypeEnum::GROUP->value;
+            }), 'string', 'max:10'],
         ];
     }
 }

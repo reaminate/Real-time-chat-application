@@ -4,6 +4,8 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 
 class AttachmentResource extends JsonResource
 {
@@ -21,7 +23,14 @@ class AttachmentResource extends JsonResource
             'file_name' => $this->__get('file_name'),
             'mime_type' => $this->__get('mime_type'),
             'size' => $this->__get('size'),
-            'path' => $this->__get('path'),
+            'download_url' => $this->when(
+                Route::has('attachments.download'),
+                fn () => URL::temporarySignedRoute(
+                    'attachments.download',
+                    now()->addMinutes(30),
+                    ['attachment' => $this->__get('id')]
+                )
+            ),
         ];
     }
 }
