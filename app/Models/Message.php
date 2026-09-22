@@ -24,26 +24,31 @@ class Message extends Model
         'edited_at' => 'datetime',
     ];
 
+    /** Returns the conversation this message belongs to. */
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class, 'conversation_id');
     }
 
+    /** Returns the user who sent this message. */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sender_id');
     }
 
+    /** Returns the message this one is a reply to. */
     public function replyTo(): BelongsTo
     {
         return $this->belongsTo(Message::class, 'reply_to');
     }
 
+    /** Returns the messages that reply to this message. */
     public function replies(): HasMany
     {
         return $this->hasMany(Message::class, 'reply_to');
     }
 
+    /** Returns the file attachments on this message. */
     public function attachments(): MorphMany
     {
         return $this->morphMany(Attachment::class, 'attachable')

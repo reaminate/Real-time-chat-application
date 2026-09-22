@@ -20,6 +20,7 @@ class Attachment extends Model
         'size' => 'integer',
     ];
 
+    /** Returns the owning model (User, Message, etc.) this attachment belongs to. */
     public function attachable(): MorphTo
     {
         return $this->morphTo();

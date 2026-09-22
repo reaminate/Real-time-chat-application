@@ -23,15 +23,20 @@ class ConversationMember extends Pivot
     protected $table = 'conversation_member';
     public $incrementing = true;
     public $timestamps = true;
-    public function user(): BelongsTo 
+    /** Returns the user this membership record belongs to. */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-    public function conversation(): BelongsTo 
+
+    /** Returns the conversation this membership record belongs to. */
+    public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class, 'conversation_id');
     }
-    public function lastRead(): BelongsTo 
+
+    /** Returns the last message this member has read in the conversation. */
+    public function lastRead(): BelongsTo
     {
         return $this->belongsTo(Message::class, 'last_read_id');
     }

@@ -35,7 +35,7 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
-
+    /** Returns all conversations this user is a member of (via the conversation_member pivot).  show all convos*/
     public function conversations(): BelongsToMany
     {
         return $this->belongsToMany(Conversation::class, 'conversation_member', 'user_id', 'conversation_id')
@@ -43,38 +43,26 @@ class User extends Authenticatable
             ->withPivot(['id', 'last_read_id', 'role', 'joined_at', 'left_at'])
             ->withTimestamps();
     }
-    /**
-     * return the conversations user is part of
-     * 
-     * @return HasMany<ConversationMember, User>
-     */
+
+    /** Returns this user's conversation_member pivot rows (their membership record in each conversation). updating that record*/
     public function conversationMembers(): HasMany
     {
         return $this->hasMany(ConversationMember::class, 'user_id');
     }
-    /**
-     * return the conversations this user created
-     * 
-     * @return HasMany<Conversation, User>
-     */
-    public function conversation(): HasMany
+
+    /** Returns the conversations this user created. to cehck convos this user created*/
+    public function createdConversations(): HasMany
     {
         return $this->hasMany(Conversation::class, 'created_by');
     }
-    /**
-     * returns the messages of this user
-     * 
-     * @return HasMany<Message, User>
-     */
+
+    /** Returns the messages sent by this user. */
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class, 'sender_id');
     }
-    /**
-     * 
-     * return the avatar of this user
-     * @return MorphOne<Attachment, User>
-     */
+
+    /** Returns this user's single avatar attachment. */
     public function avatar(): MorphOne
     {
         return $this->morphOne(Attachment::class, 'attachable')

@@ -37,7 +37,9 @@
 - only authorized users should manage members
 - no duplicate direct conversations between two same users
 ### rules
-when creating, set the last read id to null. That way there wont be an error.
+- when creating, set the last read id to null. That way there wont be an error.
+- If the type is name, set name to a join of the two people involved.
+
 # conversation_members (pivot for users and conversations)
 ## table
 |id-> primary key|
@@ -74,6 +76,8 @@ when creating, set the last read id to null. That way there wont be an error.
 - only conversation members may view or send messages
 - only the sender may edit or delete their own message
 - deleting a message should soft delete it, so other members still see it in conversation history
+- only the admin can fully delete a message
+- owner is the only one who can assign admins
 
 # attachments (polymorphic)
 one table stores every uploaded file; the owner is any model via `attachable_type` + `attachable_id`. currently: `User` (avatar) and `Message` (files/images). could later serve `Conversation` (group avatar) with no schema change.

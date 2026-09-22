@@ -21,16 +21,19 @@ class Conversation extends Model
         'type' => ConversationTypeEnum::class,
     ];
 
+    /** Returns the user who created this conversation. */
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** Returns this conversation's most recent message. */
     public function lastMessage(): BelongsTo
     {
         return $this->belongsTo(Message::class, 'last_message_id');
     }
 
+    /** Returns all users who are members of this conversation (via the conversation_member pivot). */
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'conversation_member', 'conversation_id', 'user_id')
@@ -39,11 +42,13 @@ class Conversation extends Model
             ->withTimestamps();
     }
 
+    /** Returns this conversation's conversation_member pivot rows. */
     public function conversationMembers(): HasMany
     {
         return $this->hasMany(ConversationMember::class, 'conversation_id');
     }
 
+    /** Returns all messages posted in this conversation. */
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class, 'conversation_id');
