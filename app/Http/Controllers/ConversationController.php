@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use AppModels\uconversation;
+use App\Models\Conversation;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
 

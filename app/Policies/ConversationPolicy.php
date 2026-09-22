@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\ConversationRoleEnum;
 use App\Models\User;
 use App\Models\Conversation;
 use Illuminate\Auth\Access\Response;
@@ -13,7 +14,7 @@ class ConversationPolicy
      */
     public function viewAny(User $user): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -21,15 +22,18 @@ class ConversationPolicy
      */
     public function view(User $user, Conversation $conversation): bool
     {
-        return false;
+        return $conversation->conversationMembers()
+            ->where('user_id', $user->id)
+            ->exists();
     }
+
 
     /**
      * Determine whether the user can create models.
      */
     public function create(User $user): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -37,7 +41,7 @@ class ConversationPolicy
      */
     public function update(User $user, Conversation $conversation): bool
     {
-        return false;
+        return $this->isOwner($user, $conversation);  
     }
 
     /**
@@ -45,7 +49,7 @@ class ConversationPolicy
      */
     public function delete(User $user, Conversation $conversation): bool
     {
-        return false;
+        return $this->isOwner($user, $conversation);  
     }
 
     /**
@@ -53,7 +57,7 @@ class ConversationPolicy
      */
     public function restore(User $user, Conversation $conversation): bool
     {
-        return false;
+        return $this->isOwner($user, $conversation); 
     }
 
     /**
@@ -61,6 +65,20 @@ class ConversationPolicy
      */
     public function forceDelete(User $user, Conversation $conversation): bool
     {
-        return false;
+        return $this->isOwner($user, $conversation); 
     }
+    /**
+     * checks if the its the owner of the convo
+     * @param User $user
+     * @param Conversation $conversation
+     * @return bool
+     */
+    private function isOwner(User $user, Conversation $conversation): bool
+    {
+        return $conversation->conversationMembers()
+            ->where('user_id', $user->id)
+            ->where('role', ConversationRoleEnum::OWNER)
+            ->exists();
+    }
+
 }

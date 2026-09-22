@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use AppModels\uattachment;
+use App\Models\Attachment;
 use App\Http\Requests\StoreAttachmentRequest;
 use App\Http\Requests\UpdateAttachmentRequest;
 
