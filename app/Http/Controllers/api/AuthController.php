@@ -8,6 +8,7 @@ use App\Http\Requests\LoginUserRequest;
 use App\Http\Requests\RegisterUserRequest;
 use App\Models\Attachment;
 use App\Models\User;
+use App\Services\AuthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -22,74 +23,31 @@ class AuthController extends Controller
      * @param RegisterUserRequest $request
      * @return \Illuminate\Http\Response
      */
-    public function register(RegisterUserRequest $request)
+    public function register(RegisterUserRequest $request, AuthService $service)
     {
-
-        $user = User::create($request->safe()->except('avatar'));
-        $this->storeAvatarFor($request, $user);
-        $user->load('avatar');
-
-        $token = $user->createToken('usertoken')->plainTextToken;
+        $validated = $request->validated();
+        $data = $service->register($validated, $request);
 
         return response([
             'message' => 'login successful',
-            'user' => $user,
-            'access_token' => $token,
+            'user' => $data['user'],
+            'access_token' => $data['token'],
             'token_type' => 'bearer',
         ], 201);
-    }
-    /**
-     * stores the avatar of the user in attachments
-     * @param RegisterUserRequest $request
-     * @param User $user
-     * @return Attachment|null
-     */
-    protected function storeAvatarFor(RegisterUserRequest $request, User $user): ?Attachment
-    {
-        if (! $request->hasFile('avatar')) {
-            return null;
-        }
-
-        $file = $request->file('avatar');
-        $path = $file->store('avatars', 'public');
-
-        return $user->avatar()->create([
-            'collection' => AttachmentCollectionEnum::AVATAR,
-            'original_name' => $file->getClientOriginalName(),
-            'file_name' => basename($path),
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
-            'path' => $path,
-        ]);
     }
     /**
      * logs in the user
      * @param LoginUserRequest $request
      * @return \Illuminate\Http\Response
      */
-    public function login(LoginUserRequest $request) 
+    public function login(LoginUserRequest $request, AuthService $service) 
     {
         $validated = $request->validated();
-        $key = Str::lower($validated['email']).'|'.$request->ip();
-        if(RateLimiter::tooManyAttempts($key, 5)){
-            $seconds = RateLimiter::availableIn($key);
-            throw ValidationException::withMessages([
-                'error' => 'too many login attempts',
-                'try_again' => $seconds,
-            ]);
-        }
-        $user = User::findOrFail('email', $validated['email']);
-        if(!Hash::check($validated['password'], $user->password)){
-            throw ValidationException::withMessages([
-                'error' => 'wrong_password',
-            ]);
-        }
-        $token = $user->createToken('auth_token')->plainTextToken;
-
+        $data = $service->login($validated, $request);
         return response([
             'message' => 'login successful',
-            'user' => $user,
-            'access_token' => $token,
+            'user' => $data['user'],
+            'access_token' => $data['token'],
             'type' => 'bearer',
         ], 200);
     }
@@ -100,7 +58,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete;
+        $request->user()->currentAccessToken()->delete();
         $request->user()->update(['last_seen_at'=>now()]);
         return response()->json([
             'message' => 'logout successful',

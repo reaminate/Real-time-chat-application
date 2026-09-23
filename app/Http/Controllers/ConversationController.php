@@ -11,6 +11,7 @@ use App\Models\Conversation;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
 use App\Models\User;
+use App\Services\ConversationService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -34,27 +35,13 @@ class ConversationController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreConversationRequest $request)
+    public function store(StoreConversationRequest $request, ConversationService $service)
     {
         if($request->user()->cannot('create', Conversation::class)){
             abort(403);
         }
         $validated = $request->validated();
-        $creator = User::findOrFail($request->user()->__get('id'));
-        $validated['created_by'] = $creator->__get('id');
-        $users = $validated['users'];
-        $validated['type'] = (count($users) === 1) ? ConversationTypeEnum::DIRECT->value : ConversationTypeEnum::GROUP->value;
-        unset($validated['users']);
-        $conversation = Conversation::create($validated);
-        foreach($users as $userId){
-            $conversation->conversationMembers()->create([
-                'user_id' => $userId,
-                'role' => $userId === $creator->id
-                    ? ConversationRoleEnum::OWNER->value
-                    : ConversationRoleEnum::MEMBER->value,
-                'joined_at' => now(),
-            ]);
-        }
+        $service->store($validated, $request);
         return response('', 201);
     }
 
