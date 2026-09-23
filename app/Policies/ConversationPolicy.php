@@ -24,6 +24,7 @@ class ConversationPolicy
     {
         return $conversation->conversationMembers()
             ->where('user_id', $user->id)
+            ->whereNull('left_at')
             ->exists();
     }
 
@@ -41,9 +42,18 @@ class ConversationPolicy
      */
     public function update(User $user, Conversation $conversation): bool
     {
-        return $this->isOwner($user, $conversation);  
+        return $this->isAdmin($user, $conversation);  
     }
-
+    /**
+     * manages adding and deleting users
+     * @param User $user
+     * @param Conversation $conversation
+     * @return bool
+     */
+    public function manageUsers(User $user, Conversation $conversation): bool 
+    {
+        return $this->isAdmin($user, $conversation);
+    }
     /**
      * Determine whether the user can delete the model.
      */
@@ -77,7 +87,22 @@ class ConversationPolicy
     {
         return $conversation->conversationMembers()
             ->where('user_id', $user->id)
-            ->where('role', ConversationRoleEnum::OWNER)
+            ->where('role', ConversationRoleEnum::OWNER->value)
+            ->whereNull('left_at')
+            ->exists();
+    }
+    /**
+     * checks if the user is admin of this convo
+     * @param User $user
+     * @param Conversation $conversation
+     * @return void
+     */
+    private function isAdmin(User $user, Conversation $conversation): bool
+    {
+        return $conversation->conversationMembers()
+            ->where('user_id', $user->id)
+            ->where('role', '!=' ,ConversationRoleEnum::MEMBER->value)
+            ->whereNull('left_at')
             ->exists();
     }
 

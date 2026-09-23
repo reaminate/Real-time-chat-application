@@ -27,9 +27,10 @@ class StoreConversationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => ['required', new Enum(ConversationTypeEnum::class)],
+            'users' => ['array', 'required', 'min:1'],
+            'users.*' => ['exists:users,id', 'integer'],
             'name' => [Rule::requiredIf(function(){
-                return $this->input('type') === ConversationTypeEnum::GROUP->value;
+                return count($this->input('users', [])) > 1;
             }), 'string', 'max:10'],
         ];
     }

@@ -8,4 +8,6 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::get('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('/conversation', ConversationController::class);
+    Route::post('/conversation/{conversation}/users', [ConversationController::class, 'addUsers']);
+    Route::delete('/conversation/{conversation}/users', [ConversationController::class, 'deleteUsers']);
 });

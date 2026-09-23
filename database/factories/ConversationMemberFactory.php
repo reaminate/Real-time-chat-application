@@ -30,9 +30,9 @@ class ConversationMemberFactory extends Factory
             'role' => ConversationRoleEnum::MEMBER,
             'joined_at' => fake()->dateTimeBetween('-1 year')->format('Y-m-d'),
             'left_at' => null,
-            // Pivot models don't touch timestamps on their own.
-            'created_at' => now(),
-            'updated_at' => now(),
+            // // Pivot models don't touch timestamps on their own.
+            // 'created_at' => now(),
+            // 'updated_at' => now(),
         ];
     }
 

@@ -33,13 +33,14 @@ class Conversation extends Model
         return $this->belongsTo(Message::class, 'last_message_id');
     }
 
-    /** Returns all users who are members of this conversation (via the conversation_member pivot). */
+    /** Returns all active (not left) users who are members of this conversation (via the conversation_member pivot). */
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'conversation_member', 'conversation_id', 'user_id')
             ->using(ConversationMember::class)
             ->withPivot(['id', 'last_read_id', 'role', 'joined_at', 'left_at'])
-            ->withTimestamps();
+            ->withTimestamps()
+            ->wherePivotNull('left_at');
     }
 
     /** Returns this conversation's conversation_member pivot rows. */

@@ -2,18 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\MessageResource;
 use App\Models\Message;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
+use Illuminate\Http\Request;
 
 class MessageController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        //
+        if($request->user()->cannot('viewAll')){
+            abort(403);
+        }
+        $messages = Message::query()
+        ->when($request->has('attachments'), function($query){
+            $query->with('attachments');
+        })->with('replies')->cursorPaginate(10);
+
+        return MessageResource::collection($messages);
     }
 
     /**

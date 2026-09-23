@@ -2,20 +2,19 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\ConversationTypeEnum;
+use App\Models\Conversation;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Enum;
 
-class UpdateConversationRequest extends FormRequest
+class AddUsersRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -27,16 +26,16 @@ class UpdateConversationRequest extends FormRequest
     {
         $conversation = $this->route('conversation');
         $conversationId = $conversation instanceof Conversation ? $conversation->id : $conversation;
+
         return [
-            'make_users_admin' => ['array', 'sometimes', 'min:1'],
-            'make_users_admin.*' => [
+            'add_users' => ['array', 'required', 'min:1'],
+            'add_users.*' => [
                 'integer',
-                Rule::exists('conversation_member', 'user_id')->where(
+                Rule::exists('users', 'id'),
+                Rule::unique('conversation_member', 'user_id')->where(
                     fn ($query) => $query->where('conversation_id', $conversationId)->whereNull('left_at')
                 ),
             ],
-            'name' => ['sometimes', 'string', 'max:10'],
-            'created_by' => ['sometimes', 'exists:users,id'],
         ];
     }
 }

@@ -35,13 +35,14 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
-    /** Returns all conversations this user is a member of (via the conversation_member pivot).  show all convos*/
+    /** Returns all conversations this user is currently (not left) a member of. */
     public function conversations(): BelongsToMany
     {
         return $this->belongsToMany(Conversation::class, 'conversation_member', 'user_id', 'conversation_id')
             ->using(ConversationMember::class)
             ->withPivot(['id', 'last_read_id', 'role', 'joined_at', 'left_at'])
-            ->withTimestamps();
+            ->withTimestamps()
+            ->wherePivotNull('left_at');
     }
 
     /** Returns this user's conversation_member pivot rows (their membership record in each conversation). updating that record*/
