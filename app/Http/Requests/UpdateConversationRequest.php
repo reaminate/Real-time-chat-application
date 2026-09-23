@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\ConversationTypeEnum;
+use App\Models\Conversation;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;

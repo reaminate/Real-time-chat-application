@@ -6,6 +6,7 @@ use App\Enums\AttachmentCollectionEnum;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginUserRequest;
 use App\Http\Requests\RegisterUserRequest;
+use App\Http\Resources\UserResource;
 use App\Models\Attachment;
 use App\Models\User;
 use App\Services\AuthService;
@@ -30,7 +31,7 @@ class AuthController extends Controller
 
         return response([
             'message' => 'login successful',
-            'user' => $data['user'],
+            'user' => UserResource::make($data['user']),
             'access_token' => $data['token'],
             'token_type' => 'bearer',
         ], 201);
@@ -46,7 +47,7 @@ class AuthController extends Controller
         $data = $service->login($validated, $request);
         return response([
             'message' => 'login successful',
-            'user' => $data['user'],
+            'user' => UserResource::make($data['user']),
             'access_token' => $data['token'],
             'type' => 'bearer',
         ], 200);

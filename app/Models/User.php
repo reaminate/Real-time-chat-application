@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'last_seen_at'])]
@@ -68,5 +69,15 @@ class User extends Authenticatable
     {
         return $this->morphOne(Attachment::class, 'attachable')
             ->where('collection', AttachmentCollectionEnum::AVATAR->value);
+    }
+    protected static function booted():void
+    {
+        static::saving(function($model){
+            $model->friend_id = Str::slug($model->email);
+        });
+    }
+    public function getRouteKeyName(): string
+    {
+        return 'friend_id';
     }
 }

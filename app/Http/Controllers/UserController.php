@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AttachmentCollectionEnum;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\UserService;
 use Illuminate\Http\Request;
 
 class UserController extends Controller
@@ -18,7 +18,7 @@ class UserController extends Controller
         if($request->user()->cannot('viewAny', User::class)){
             abort(403);
         }
-        $users = User::withoutRelations()->orderBy('name', 'desc')->cursorPaginate(20);
+        $users = User::orderBy('name', 'desc')->cursorPaginate(20);
         return UserResource::collection($users);
     }
 
@@ -52,26 +52,13 @@ class UserController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateUserRequest $request, User $user)
+    public function update(UpdateUserRequest $request, User $user, UserService $service)
     {
         if($request->user()->cannot('update', $user)){
             abort(403);
         }
         $validated = $request->validated();
-        if(isset($validated['avatar'])){
-            $file = $request->file('avatar');
-            $path = $file->store('avatars', 'local');
-            $user->avatar()->update([
-                'collection' => AttachmentCollectionEnum::AVATAR,
-                'original_name' => $file->getClientOriginalName(),
-                'file_name' => basename($path),
-                'mime_type' => $file->getMimeType(),
-                'size' => $file->getSize(),
-                'path' => $path,
-            ]);
-            unset($validated['avatar']);
-        }
-        $user->update($validated);
+        $service->update($validated, $request, $user);
         return response('', 200);
     }
 

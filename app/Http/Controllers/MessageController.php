@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AttachmentCollectionEnum;
-use App\Enums\MessageTypeEnum;
 use App\Http\Resources\MessageResource;
 use App\Models\Message;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
+use App\Services\MessageService;
 use Illuminate\Http\Request;
 
 class MessageController extends Controller
@@ -31,27 +30,13 @@ class MessageController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreMessageRequest $request)
+    public function store(StoreMessageRequest $request, MessageService $service)
     {
         if($request->user()->cannot('create', Message::class)){
             abort(403);
         }
         $validated = $request->validated();
-        $file = $validated['attachment'];
-        unset($validated['attachment']);
-        $validated['sender_id'] = $request->user()->__get('id');
-        $message = Message::create($validated);
-        if($validated['type'] != MessageTypeEnum::TEXT->value){
-            $path = $request->file('attachment')->store('attachments', 'local');
-            $message->attachments()->create([
-                'collection' => AttachmentCollectionEnum::ATTACHMENT->value,
-                'original_name' => $file->getClientOriginalName(),
-                'file_name' => basename($file),
-                'mime_type' => $file->extension(),
-                'size' => $file->getSize(),
-                'path' => $path,
-            ]);
-        }
+        $service->store($validated, $request);
         return response('', 201);
     }
 
@@ -75,28 +60,13 @@ class MessageController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateMessageRequest $request, Message $message)
+    public function update(UpdateMessageRequest $request, Message $message, MessageService $service)
     {
-        if($request->user()->cannot('update')){
+        if($request->user()->cannot('update', $message)){
             abort(403);
         }
         $validated = $request->validated();
-        if($message->__get('type') == MessageTypeEnum::TEXT){
-            unset($validated['attachment']);
-            $message->update($validated);
-        } else {
-            $file = $validated['attachment'];
-            unset($validated['body']);
-            $path = $request->file('attachment')->store('attachments', 'local');
-            $message->attachments()->update([
-                'collection' => AttachmentCollectionEnum::ATTACHMENT->value,
-                'original_name' => $file->getClientOriginalName(),
-                'file_name' => basename($file),
-                'mime_type' => $file->extension(),
-                'size' => $file->getSize(),
-                'path' => $path,
-            ]);
-        }
+        $service->update($validated, $request, $message);
         return response('', 200);
     }
 
