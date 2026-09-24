@@ -13,9 +13,6 @@ class AttachmentSeeder extends Seeder
     /**
      * Run the database seeds.
      *
-     * Gives every image/file message an attachment (soft-deleted messages
-     * keep theirs) and 6 users an avatar. Only the database rows are
-     * created; no files are written to storage.
      */
     public function run(): void
     {

@@ -32,7 +32,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'last_seen_at' => 'date',
+            'last_seen_at' => 'datetime:Y-m-d H:i',
             'password' => 'hashed',
         ];
     }
@@ -73,7 +73,8 @@ class User extends Authenticatable
     protected static function booted():void
     {
         static::saving(function($model){
-            $model->friend_id = Str::slug($model->email);
+            $name_bit = strstr($model->email, "@", true);
+            $model->friend_id = Str::slug($name_bit);
         });
     }
     public function getRouteKeyName(): string

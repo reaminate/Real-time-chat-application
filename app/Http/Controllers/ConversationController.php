@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AddUsersRequest;
 use App\Http\Requests\DeleteUsersRequest;
+use App\Http\Requests\ForceDeleteOrRestoreUserInConversationRequest;
 use App\Http\Resources\ConversationResource;
+use App\Http\Resources\UserResource;
 use App\Models\Conversation;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
@@ -109,6 +111,26 @@ class ConversationController extends Controller
             abort(403);
         }
         $conversation->delete();
+        return response()->noContent();
+    }
+    
+    public function restore(Conversation $conversation, ForceDeleteOrRestoreUserInConversationRequest $request, ConversationService $service){
+        if($request->user()->cannot('restore', $conversation)){
+            abort(403);
+        }
+        $users = $service->restore($request, $conversation);
+        return response()->json([
+            'message' => 'users have been restored',
+            'users' => UserResource::collection($users),
+        ], 200);
+    }
+    public function forceDelete(Conversation $conversation, ForceDeleteOrRestoreUserInConversationRequest $request)
+    {
+        if($request->user()->cannot('forceDelete', $conversation)){
+            abort(403);
+        }
+        $users = $request->validated('users');
+        $conversation->allUsers()->detach($users);
         return response()->noContent();
     }
 }

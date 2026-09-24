@@ -6,6 +6,8 @@ use App\Enums\ConversationRoleEnum;
 use App\Enums\ConversationTypeEnum;
 use App\Http\Requests\AddUsersRequest;
 use App\Http\Requests\DeleteUsersRequest;
+use App\Http\Requests\ForceDeleteOrRestoreRequest;
+use App\Http\Requests\ForceDeleteOrRestoreUserInConversationRequest;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
 use App\Models\Conversation;
@@ -134,4 +136,27 @@ class ConversationService
         }
         return $conversation;
     }
+    /**
+     * restores the models and return the restored model names
+     * @param ForceDeleteOrRestoreUserInConversationRequest $request
+     * @param Conversation $conversation
+     * @return array
+     */
+    public function restore(ForceDeleteOrRestoreUserInConversationRequest $request, Conversation $conversation): array 
+    {
+        $validated = $request->validated();
+        $users = $validated['delete_users'];
+        $restored_users = [];
+        DB::transaction(function() use($conversation, $users, &$validated){
+            $conversation->conversationMembers()
+                ->whereIn('user_id', $users)
+                ->whereNotNull('left_at')
+                ->update(['left_at' => null]);
+        });
+        $restored_users = User::findMany($users)->only(['name'])->toArray();
+        return $restored_users;
+    }
+    public function forceDelete(): ReturnType {}
+    
+    
 }

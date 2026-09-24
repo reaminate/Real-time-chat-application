@@ -9,13 +9,21 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::get('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/conversation/{conversation}/users', [ConversationController::class, 'addUsers']);
-    Route::delete('/conversation/{conversation}/users', [ConversationController::class, 'deleteUsers']);
-    Route::get('/message/{message}/restore', [MessageController::class, 'restore'])->withTrashed();
-    Route::delete('message{message}/force_delete', [MessageController::class, 'forceDelete'])->withTrashed();
-    Route::get('/user/{user}', [UserController::class, 'view']);
+    Route::get('/logout', [AuthController::class, 'logout']);
 
-    Route::apiResource('/user', UserController::class)->except('except', 'store');
+    Route::controller(ConversationController::class)->group(function(){
+        Route::post('/conversation/{conversation}/users', 'addUsers');
+        Route::delete('/conversation/{conversation}/users', 'deleteUsers');
+    });
+    Route::controller(MessageController::class)->group(function(){
+        Route::get('/message/{message}/restore', 'restore');
+        Route::delete('/message/{message}/force_delete', 'forceDelete');
+    });
+    Route::controller(ConversationController::class)->group(function(){
+        Route::get('/conversation/{conversation}/restore', 'restore');
+        Route::delete('/conversation/{conversation}/force_delete', 'forceDelete');
+    });
+    Route::apiResource('/user', UserController::class)->except('store');
     Route::apiResources([
         '/conversation' => ConversationController::class,
         '/message' => MessageController::class,

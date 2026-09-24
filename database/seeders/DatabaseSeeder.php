@@ -21,8 +21,12 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
             'password' => bcrypt('password')
         ]);
-        User::factory(9)->create();
-
+        User::factory()->create([
+            'name' => 'test user 2',
+            'email' => 'test2@example.com',
+            'password' => bcrypt('password'),
+        ]);
+        User::factory()->createMany(8);
         // Order matters: each seeder relies on the rows made by the one before it.
         $this->call([
             ConversationSeeder::class,

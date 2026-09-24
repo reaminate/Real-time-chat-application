@@ -42,7 +42,16 @@ class Conversation extends Model
             ->withTimestamps()
             ->wherePivotNull('left_at');
     }
-
+    /**
+     * returns all the users, even the ones that left, but havent been fully deleted
+     */
+    public function allUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'conversation_member', 'conversation_id', 'user_id')
+            ->using(ConversationMember::class)
+            ->withPivot(['id', 'last_read_id', 'role', 'joined_at', 'left_at'])
+            ->withTimestamps();
+    }
     /** Returns this conversation's conversation_member pivot rows. */
     public function conversationMembers(): HasMany
     {
