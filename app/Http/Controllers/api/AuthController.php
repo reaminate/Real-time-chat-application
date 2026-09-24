@@ -11,6 +11,7 @@ use App\Models\Attachment;
 use App\Models\User;
 use App\Services\AuthService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -65,4 +66,11 @@ class AuthController extends Controller
             'message' => 'logout successful',
         ]);
     }  
+
+    public function meSelf()
+    {
+        $user = Auth::user();
+        $user->load(['conversations', 'createdConversations']);
+        return UserResource::make($user);
+    }
 }

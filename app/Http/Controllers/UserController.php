@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateUserRequest;
+use App\Http\Requests\UserSearchRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\UserService;
@@ -13,12 +14,14 @@ class UserController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(UserSearchRequest $request)
     {
         if($request->user()->cannot('viewAny', User::class)){
             abort(403);
         }
-        $users = User::orderBy('name', 'desc')->cursorPaginate(20);
+        $string_of_letters = $request->validated('search');
+        $string_of_letters = "%$string_of_letters%";
+        $users = User::whereLike('name', $string_of_letters)->whereNot('name', $request->user()->__get('name'))->orderByDesc('name')->cursorPaginate(20);
         return UserResource::collection($users);
     }
 

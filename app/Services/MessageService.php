@@ -22,7 +22,7 @@ class MessageService
         unset($validated['attachment']);
         $validated['sender_id'] = $request->user()->__get('id');
         $message = Message::create($validated);
-
+        $message->conversation()->update(['last_message_id'=> $message->__get('id')]);
         if($validated['type'] != MessageTypeEnum::TEXT->value){
             $this->storeAttachmentFor($request, $message);
         }

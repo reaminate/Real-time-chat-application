@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Http\Resources\MessageResource;
 use App\Models\Message;
 use App\Http\Requests\StoreMessageRequest;
@@ -36,7 +37,8 @@ class MessageController extends Controller
             abort(403);
         }
         $validated = $request->validated();
-        $service->store($validated, $request);
+        $message = $service->store($validated, $request);
+        broadcast(new MessageSent($message))->toOthers();
         return response('', 201);
     }
 

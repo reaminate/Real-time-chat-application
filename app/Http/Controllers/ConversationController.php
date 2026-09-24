@@ -53,8 +53,10 @@ class ConversationController extends Controller
         }
         if ($request->has('created_by')) $conversation->load('createdBy');
         if ($request->has('members'))    $conversation->load('users');
-        if ($request->has('messages'))   $conversation->load('messages.user')->cursorPaginate(20);
-
+        if ($request->has('messages'))   $conversation->load(['messages' => fn($q) => $q->latest()->with('user')]);
+        $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update([
+            'last_read_id' => $conversation->last_message_id
+        ]);
         return ConversationResource::make($conversation);
     }
 

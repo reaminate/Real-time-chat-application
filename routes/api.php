@@ -10,7 +10,7 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::get('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/logout', [AuthController::class, 'logout']);
-
+    Route::get('/me', [AuthController::class, 'meSelf']);
     Route::controller(ConversationController::class)->group(function(){
         Route::post('/conversation/{conversation}/users', 'addUsers');
         Route::delete('/conversation/{conversation}/users', 'deleteUsers');
