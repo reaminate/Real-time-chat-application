@@ -7,6 +7,8 @@ use App\Enums\MessageTypeEnum;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
 use App\Models\Attachment;
+use App\Models\Conversation;
+use App\Models\ConversationMember;
 use App\Models\Message;
 
 class MessageService
@@ -19,6 +21,13 @@ class MessageService
      */
     public function store(array $validated, StoreMessageRequest $request): Message
     {
+        //checking if user is a member of that convo
+        if(!ConversationMember::where('conversation_id', $validated['conversation_id'])
+            ->where('user_id', $request->user()->__get('id'))
+            ->exists())
+        {
+            abort(403);
+        }
         unset($validated['attachment']);
         $validated['sender_id'] = $request->user()->__get('id');
         $message = Message::create($validated);

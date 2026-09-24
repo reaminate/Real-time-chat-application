@@ -35,6 +35,7 @@ class AddUsersRequest extends FormRequest
                 Rule::unique('conversation_member', 'user_id')->where(
                     fn ($query) => $query->where('conversation_id', $conversationId)->whereNull('left_at')
                 ),
+                'distinct',
             ],
         ];
     }

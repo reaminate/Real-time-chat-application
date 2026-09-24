@@ -35,6 +35,7 @@ class ForceDeleteOrRestoreUserInConversationRequest extends FormRequest
                 Rule::exists('conversation_member', 'user_id')->where(
                     fn ($query) => $query->where('conversation_id', $conversationId)->whereNotNull('left_at')
                 ),
+                'distinct',
             ],
         ];
     }

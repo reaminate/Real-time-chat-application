@@ -15,9 +15,7 @@ class ConversationFactory extends Factory
     /**
      * Define the model's default state.
      *
-     * last_message_id is left null: messages need a conversation first,
-     * so the MessageSeeder fills it in afterwards.
-     *
+     * 
      * @return array<string, mixed>
      */
     public function definition(): array

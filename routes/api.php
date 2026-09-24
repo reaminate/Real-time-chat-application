@@ -11,10 +11,15 @@ Route::get('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'meSelf']);
+
+    Route::apiResource('/user', UserController::class)->except('store');
+    
+    Route::get('/conversation/{conversation}/messages', [MessageController::class, 'conversationMessages']);
+    
     Route::controller(ConversationController::class)->group(function(){
         Route::post('/conversation/{conversation}/users', 'addUsers');
         Route::delete('/conversation/{conversation}/users', 'deleteUsers');
-    });
+    });    
     Route::controller(MessageController::class)->group(function(){
         Route::get('/message/{message}/restore', 'restore');
         Route::delete('/message/{message}/force_delete', 'forceDelete');
@@ -23,7 +28,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/conversation/{conversation}/restore', 'restore');
         Route::delete('/conversation/{conversation}/force_delete', 'forceDelete');
     });
-    Route::apiResource('/user', UserController::class)->except('store');
     Route::apiResources([
         '/conversation' => ConversationController::class,
         '/message' => MessageController::class,

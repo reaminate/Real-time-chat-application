@@ -17,10 +17,12 @@ class MessageController extends Controller
      */
     public function index(Request $request)
     {
-        if($request->user()->cannot('viewAll', Message::class)){
+        if($request->user()->cannot('viewAny', Message::class)){
             abort(403);
         }
+        $user = $request->user();
         $messages = Message::query()
+        ->where('sender_id', $user->__get('id'))
         ->when($request->has('attachments'), function($query){
             $query->with('attachments');
         })->with('replies')->cursorPaginate(10);
@@ -37,6 +39,7 @@ class MessageController extends Controller
             abort(403);
         }
         $validated = $request->validated();
+
         $message = $service->store($validated, $request);
         broadcast(new MessageSent($message))->toOthers();
         return response('', 201);
@@ -89,7 +92,7 @@ class MessageController extends Controller
      */
     public function forceDelete(Message $message, Request $request)
     {
-        if($request->user()->cannot('forceDelete')){
+        if($request->user()->cannot('forceDelete', $message)){
             abort(403);
         }
         $message->forceDelete();
@@ -100,7 +103,7 @@ class MessageController extends Controller
      */
     public function restore(Message $message, Request $request)
     {
-        if($request->user()->cannot('restore')){
+        if($request->user()->cannot('restore', $message)){
             abort(403);
         }
         $message->restore();

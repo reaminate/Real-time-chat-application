@@ -78,6 +78,17 @@ class ConversationPolicy
         return $this->isOwner($user, $conversation); 
     }
     /**
+     * return true as anu authenticated should be able to create direct convos
+     * @param User $user
+     * @return bool
+     */
+    public function direct(User $user):bool 
+    {
+        return true;
+    }
+    
+
+    /**
      * checks if the its the owner of the convo
      * @param User $user
      * @param Conversation $conversation

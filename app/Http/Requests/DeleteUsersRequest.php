@@ -34,6 +34,7 @@ class DeleteUsersRequest extends FormRequest
                 Rule::exists('conversation_member', 'user_id')->where(
                     fn ($query) => $query->where('conversation_id', $conversationId)->whereNull('left_at')
                 ),
+                'distinct',
             ],
         ];
     }
