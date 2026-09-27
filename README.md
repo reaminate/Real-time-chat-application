@@ -574,8 +574,8 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 
 
 # To run the back end
-php artisan serve
-php artisan queue:work
-php artisan reverb:start --debug
-php artisan schedule:work     
+- php artisan serve
+- php artisan queue:work
+- php artisan reverb:start --debug
+- php artisan schedule:work     
 
