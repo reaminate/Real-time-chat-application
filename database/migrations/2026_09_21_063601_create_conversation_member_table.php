@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('conversation_member', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained('users','id')->nullOnDelete();
-            $table->foreignId('conversation_id')->nullable()->constrained('conversations', 'id')->cascadeOnDelete();
+            $table->foreignId('conversation_id')->constrained('conversations', 'id')->cascadeOnDelete();
             $table->unique(['user_id', 'conversation_id']);
             $table->foreignId('last_read_id')->nullable()->constrained('messages', 'id')->nullOnDelete();
             $table->enum('role', array_column(ConversationRoleEnum::cases(), 'value'))->default(ConversationRoleEnum::MEMBER->value);

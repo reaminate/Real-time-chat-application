@@ -28,7 +28,7 @@ class UpdateUserRequest extends FormRequest
             'name' => ['sometimes', 'string', 'alpha'],
             'email' => ['sometimes', 'email', 'unique:users,email'],
             'new_password' => ['sometimes', Password::min(7)->letters()->mixedCase()->numbers()->uncompromised()],
-            'password' => [Password::min(7)->letters()->mixedCase()->numbers()->uncompromised(), 'required_with:new_password'],
+            'password' => ['string', 'required_with:new_password'],
             'avatar' => [
                 'nullable',
                 'image',

@@ -8,6 +8,8 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -46,8 +48,8 @@ class UserController extends Controller
         $authId = $request->user()->__get('id');
 
         $user->load(['conversations' => function($query) use($authId){
-            $query->whereHas('users', fn($query) => $query->where('users.id', $authId))->cursorPaginate(20);
-        }]);
+            $query->whereHas('users', fn($query) => $query->where('users.id', $authId));
+        }])->cursorPaginate(20);
 
         return UserResource::make($user);
     }
@@ -61,6 +63,9 @@ class UserController extends Controller
             abort(403);
         }
         $validated = $request->validated();
+        if(isset($validated['new_password']) && !Hash::check($validated['password'], $user->password)){
+            return response('', 422);
+        }
         $service->update($validated, $request, $user);
         return response('', 200);
     }
@@ -76,6 +81,20 @@ class UserController extends Controller
         $user->delete();
         return response()->noContent();
     }
+    /**
+     * returns the currently active users
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function currentlyActive(Request $request)
+    {
+        $user = $request->user();
+        $users = Cache::remember('active_users', 60, function(){
+            return User::where('last_seen_at', null)->get();
+        });
 
-    
+        return response()->json([
+            'message' => 'currently_active_users',
+            'users' => $users,
+        ], 200);
+    }
 }

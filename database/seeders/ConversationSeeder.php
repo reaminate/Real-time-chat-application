@@ -22,7 +22,7 @@ class ConversationSeeder extends Seeder
             Conversation::factory()->direct()->create(['created_by' => $creator->id]);
         }
 
-        $groupCreators = [$testUser, ...$others->random(2)->all()];
+        $groupCreators = [$testUser, ...$others->random(5)->all()];
         foreach ($groupCreators as $creator) {
             Conversation::factory()->group()->create(['created_by' => $creator->id]);
         }

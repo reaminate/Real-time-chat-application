@@ -58,7 +58,7 @@ class MessageService
     }
 
     /**
-     * stores the attachment file on the message in attachments
+     * stores the attachment file on the message in attachments or updates it
      * @param StoreMessageRequest|UpdateMessageRequest $request
      * @param Message $message
      * @param bool $update

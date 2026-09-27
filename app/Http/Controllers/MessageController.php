@@ -57,7 +57,7 @@ class MessageController extends Controller
         ->when($request->has('conversation_information'), fn($query) => $query->load('conversation'))
         ->when($request->has('reply_to'), fn($query) => $query->load('replyTo'))
         ->when($request->has('replies'), fn($query) => $query->load('replies'))
-        ->when($request->has('attachments'), fn($query) => $query->load('attachments'))->first();
+        ->when($request->has('attachments'), fn($query) => $query->load('attachments'));
 
         return MessageResource::make($message);
     }

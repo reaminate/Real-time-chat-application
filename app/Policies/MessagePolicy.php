@@ -84,7 +84,7 @@ class MessagePolicy
     {
         return $message->conversation->conversationMembers()
         ->where('user_id', $user->__get('id'))
-        ->where('role', ConversationRoleEnum::ADMIN)
+        ->where('role', '!=' ,ConversationRoleEnum::MEMBER)
         ->exists();
     }
     

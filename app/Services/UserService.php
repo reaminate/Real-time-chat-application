@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AttachmentCollectionEnum;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 class UserService
 {
@@ -13,13 +14,16 @@ class UserService
      * @param array $validated
      * @param UpdateUserRequest $request
      * @param User $user
-     * @return User
      */
     public function update(array $validated, UpdateUserRequest $request, User $user): User
     {
         if(isset($validated['avatar'])){
             $this->storeAvatarFor($request, $user);
             unset($validated['avatar']);
+        }
+        if(isset($validated['new_password'])){
+            $validated['password'] = $validated['new_password'];
+            unset($validated['new_password']);
         }
         $user->update($validated);
         return $user;

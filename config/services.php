@@ -34,5 +34,10 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    //not used anymore
+    // 'gemini' => [
+    //     'key' => env('GEMINI_API_KEY'),
+    //     'model' => env('GEMINI_MODEL'), 
+    // ]
 
 ];

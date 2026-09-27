@@ -57,7 +57,6 @@
 - a member may remove themself (leave); this should set left_at rather than deleting the row
 ### behavior
 - if a user is deleted itll set to null
-- if a convo is deleted itll set to null
 - this way you can rejoin a convo.
 - if both are null, itll get deleted.
 # messages (employ soft deletion)

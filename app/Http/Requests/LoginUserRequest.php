@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class LoginUserRequest extends FormRequest
 {
@@ -25,7 +24,7 @@ class LoginUserRequest extends FormRequest
     {
         return [
             'email' => ['required', 'exists:users,email'],
-            'password' => ['password' => ['required',Password::min(7)->letters()->mixedCase()->numbers()->uncompromised()]],
+            'password' => ['required', 'string'],
         ];
     }
 }

@@ -90,6 +90,7 @@ class AuthService
                 'error' => 'wrong_password',
             ]);
         }
+        $user->update(['last_seen_at' => null]);
         $token = $user->createToken('auth_token')->plainTextToken;
         $data = [];
         $data['token'] = $token;

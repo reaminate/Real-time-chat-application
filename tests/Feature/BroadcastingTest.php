@@ -102,7 +102,7 @@ class BroadcastingTest extends TestCase
         ConversationMember::factory()->create(['user_id' => $c->id, 'conversation_id' => $conversation->id, 'left_at' => now()]);
         Sanctum::actingAs($a);
 
-        $this->getJson("/api/conversation/{$conversation->id}/restore?".http_build_query(['users' => [$c->id]]))
+        $this->postJson("/api/conversation/{$conversation->id}/restore?".http_build_query(['users' => [$c->id]]))
             ->assertOk();
 
         Event::assertDispatched(UserAdded::class, fn (UserAdded $e) => $this->channelNames($e->broadcastOn())

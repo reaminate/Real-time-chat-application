@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ConversationTypeEnum;
 use App\Events\UserAdded;
 use App\Events\UserDeleted;
+use App\Events\UserTyping;
 use App\Http\Requests\AddUsersRequest;
 use App\Http\Requests\DeleteUsersRequest;
 use App\Http\Requests\ForceDeleteOrRestoreUserInConversationRequest;
@@ -21,6 +22,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 
 class ConversationController extends Controller
 {
@@ -62,9 +64,6 @@ class ConversationController extends Controller
         }
         if ($request->has('created_by')) {
             $conversation->load('createdBy');
-        }
-        if ($request->has('members')) {
-            $conversation->load('users');
         }
         //load messages regardless
         $conversation->load(['messages' => fn ($q) => $q->latest()->with('user')]);
@@ -140,7 +139,7 @@ class ConversationController extends Controller
     }
 
     /**
-     * readds back users that were previously deleted
+     * re-adds back users that were previously deleted
      *
      * @return JsonResponse
      */
@@ -173,5 +172,18 @@ class ConversationController extends Controller
 
         return response()->noContent();
     }
-    
+
+    public function userTyping(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        if ($user->cannot('view', $conversation)) {
+            abort(403);
+        }
+
+        if (Cache::add("typing:{$conversation->id}:{$user->id}", true, 3)) {
+            broadcast(new UserTyping($conversation->id, $user->id, $user->name))->toOthers();
+        }
+
+        return response()->noContent();
+    }
 }

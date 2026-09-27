@@ -12,12 +12,6 @@ class MessageSeeder extends Seeder
     /**
      * Run the database seeds.
      *
-     * Seeds 15-25 messages per conversation (120+ in total) sent by current
-     * members over the last week: mostly text, some image/file messages
-     * (their attachments come from AttachmentSeeder), about 30% replies to
-     * an earlier message in the same conversation and about 5% soft-deleted.
-     * Afterwards each conversation's last_message_id and each member's
-     * last_read_id are set, so unread counts differ between members.
      */
     public function run(): void
     {

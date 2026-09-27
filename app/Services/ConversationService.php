@@ -79,17 +79,15 @@ class ConversationService
     {
         if (isset($validated['created_by'])) {
             DB::transaction(function () use ($request, $validated, $conversation) {
-                $request->user()->conversationMembers()->where('conversation_id', $conversation->__get('id'))->update(['role' => ConversationRoleEnum::MEMBER->value]);
-                $creator = User::findOrFail($validated['created_by']);
-                $creator->conversationMembers()->update(['role' => ConversationRoleEnum::OWNER->value]);
+                $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update(['role' => ConversationRoleEnum::MEMBER->value]);
+                $conversation->conversationMembers()->where('user_id', $validated['created_by'])->update(['role' => ConversationRoleEnum::OWNER->value]);
             });
-            unset($validated['created_by']);
         }
         if (isset($validated['make_users_admin'])) {
-            $users = $validated['make_users_admin'];
-            User::where('conversation_id', $conversation->__get('id'))->findMany($users)->each(function ($user) {
-                $user->conversationMembers()->update(['role' => ConversationRoleEnum::ADMIN->value]);
-            });
+            $conversation->conversationMembers()
+                ->whereIn('user_id', $validated['make_users_admin'])
+                ->update(['role' => ConversationRoleEnum::ADMIN->value]);
+            unset($validated['make_users_admin']);
         }
         $conversation->update($validated);
 
@@ -147,16 +145,7 @@ class ConversationService
                 $validated['name'] = null;
             }
         });
-
-        if (! $conversation->exists) {
-            return $conversation;
-        }
-        if (isset($validated['type'])) {
-            $conversation->update([
-                'type' => $validated['type'],
-                'name' => $validated['name'],
-            ]);
-        }
+        $conversation->update($validated);
 
         return $conversation;
     }
