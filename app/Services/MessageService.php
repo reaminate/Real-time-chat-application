@@ -10,11 +10,16 @@ use App\Models\Attachment;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
 use App\Models\Message;
+use App\Models\User;
+use App\Notifications\UserRepliedToMessage;
+use Illuminate\Database\QueryException;
 
 class MessageService
 {
     /**
      * stores a message, attaching a file when the message type isn't text
+     * alos notifies the person if someone replied to their message
+     * also updates the conversations last message
      * @param array $validated
      * @param StoreMessageRequest $request
      * @return Message
@@ -29,8 +34,23 @@ class MessageService
             abort(403);
         }
         unset($validated['attachment']);
+
         $validated['sender_id'] = $request->user()->__get('id');
         $message = Message::create($validated);
+        if(!$message->exists){
+            abort(500);
+        }
+        //update last message with this in that conversation after storage is successful
+        Conversation::where('id', $validated['conversation_id'])
+        ->update(['last_message_id' => $message->__get('id')]);
+        //notify the person that sent that message if the current user replies to it
+        if(isset($validated['reply_to'])){
+           $original = $message->replyTo()->with('user')->first();
+           $recipient = $original?->user;
+           if($recipient && $recipient->__get('id') !== $request->user()->__get('id')){
+                $recipient->notify(new UserRepliedToMessage($message, $request->user()));
+           }
+        }
         $message->conversation()->update(['last_message_id'=> $message->__get('id')]);
         if($validated['type'] != MessageTypeEnum::TEXT->value){
             $this->storeAttachmentFor($request, $message);

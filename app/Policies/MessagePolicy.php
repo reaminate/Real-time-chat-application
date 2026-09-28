@@ -22,7 +22,10 @@ class MessagePolicy
      */
     public function view(User $user, Message $message): bool
     {
-        return true;
+        return $message->conversation->conversationMembers()
+            ->where('user_id', $user->__get('id'))
+            ->whereNull('left_at')
+            ->exists();
     }
 
     /**

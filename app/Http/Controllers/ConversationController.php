@@ -35,7 +35,7 @@ class ConversationController extends Controller
         if ($user->cannot('viewAny', Conversation::class)) {
             abort(403);
         }
-        $conversations = $user->conversations()->with('lastMessage')->get();
+        $conversations = $user->conversations()->with('lastMessage')->cursorPaginate(20);
 
         return ConversationResource::collection($conversations);
     }
@@ -49,9 +49,9 @@ class ConversationController extends Controller
             abort(403);
         }
         $validated = $request->validated();
-        $service->store($validated, $request);
+        $conversation = $service->store($validated, $request);
 
-        return response('', 201);
+        return response()->json(ConversationResource::make($conversation), 201);
     }
 
     /**
@@ -72,7 +72,7 @@ class ConversationController extends Controller
             'last_read_id' => $conversation->last_message_id,
         ]);
 
-        return ConversationResource::make($conversation);
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 
     /**
@@ -92,7 +92,7 @@ class ConversationController extends Controller
             return response()->json(['error' => 'Database update failed.'], 500);
         }
 
-        return response('', 200);
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 
     public function addUsers(AddUsersRequest $request, Conversation $conversation, ConversationService $service)
@@ -100,10 +100,11 @@ class ConversationController extends Controller
         if ($request->user()->cannot('manageUsers', $conversation)) {
             abort(403);
         }
-        $service->addUsers($request, $conversation);
+        $conversation = $service->addUsers($request, $conversation);
+        $conversation->load('users');
         broadcast(new UserAdded($conversation, $request->validated('add_users')))->toOthers();
 
-        return response('', 200);
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 
     public function deleteUsers(DeleteUsersRequest $request, Conversation $conversation, ConversationService $service)
@@ -112,7 +113,7 @@ class ConversationController extends Controller
             abort(403);
         }
         try {
-            $service->deleteUsers($request, $conversation);
+            $conversation = $service->deleteUsers($request, $conversation);
         } catch (QueryException $e) {
             return response()->json(['error' => 'Database update failed.'], 500);
         }
@@ -121,8 +122,8 @@ class ConversationController extends Controller
         if (! $conversation->exists) {
             return response()->noContent();
         }
-
-        return response('', 200);
+        $conversation->load('users');
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 
     /**

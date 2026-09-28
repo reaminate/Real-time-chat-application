@@ -23,14 +23,7 @@ class AttachmentResource extends JsonResource
             'file_name' => $this->__get('file_name'),
             'mime_type' => $this->__get('mime_type'),
             'size' => $this->__get('size'),
-            'download_url' => $this->when(
-                Route::has('attachments.download'),
-                fn () => URL::temporarySignedRoute(
-                    'attachments.download',
-                    now()->addMinutes(30),
-                    ['attachment' => $this->__get('id')]
-                )
-            ),
+            'path' => $this->__get('path'),
         ];
     }
 }

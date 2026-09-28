@@ -1,6 +1,6 @@
 # RTC App — API Documentation
 
-A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, typing indicators, and real-time broadcasting over private channels.
+A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, reply notifications, typing indicators, and real-time broadcasting over private channels.
 
 ## Table of Contents
 
@@ -10,15 +10,19 @@ A real-time chat API built with Laravel. It supports direct and group conversati
 - [Conversations](#conversations)
 - [Messages](#messages)
 - [Attachments](#attachments)
+- [Notifications](#notifications)
 - [Real-time Events](#real-time-events)
 - [Enums](#enums)
 - [Response Objects](#response-objects)
+- [Running the Backend](#running-the-backend)
 
 ---
 
 ## General
 
 **Base URL:** `/api`
+
+**Hosted base URL:** https://album-reliably-sureness.ngrok-free.dev
 
 **Headers**
 
@@ -28,17 +32,58 @@ A real-time chat API built with Laravel. It supports direct and group conversati
 | `Authorization` | `Bearer {access_token}`| On all protected routes      |
 | `Content-Type`  | `multipart/form-data`  | When uploading files         |
 
-All routes except `register`, `login`, and the signed attachment download require authentication via Laravel Sanctum.
+Routes marked 🔒 require authentication via Laravel Sanctum. Only `register` and `login` are public.
 
-**Common error responses**
+**Status codes used by this API**
 
-| Status | Meaning                                                  |
-|--------|----------------------------------------------------------|
-| `401`  | Missing or invalid token                                 |
-| `403`  | Authenticated, but not allowed to perform this action    |
-| `404`  | Resource not found                                       |
-| `422`  | Validation failed (response contains an `errors` object) |
-| `500`  | Database update failed                                   |
+| Status | Meaning                                               |
+|--------|-------------------------------------------------------|
+| `200`  | OK                                                    |
+| `201`  | Created                                               |
+| `204`  | No Content (empty body)                               |
+| `401`  | Missing or invalid token                              |
+| `403`  | Authenticated, but not allowed to perform this action |
+| `404`  | Resource not found                                    |
+| `405`  | HTTP method not allowed on this route                 |
+| `422`  | Validation failed                                     |
+| `500`  | Server or database error                              |
+
+**Error body formats**
+
+`401` / `403` / `404` / `500`:
+
+```json
+{ "message": "This action is unauthorized." }
+```
+
+`422` (validation, including rate limiting and wrong password):
+
+```json
+{
+  "message": "The email field is required.",
+  "errors": {
+    "email": ["The email field is required."]
+  }
+}
+```
+
+Two endpoints return their own error bodies: [Update Conversation](#update-conversation) and [Remove Users](#remove-users) (`{ "error": "..." }`), and [Update User](#update-user) (`422` with an empty body).
+
+**Response wrapping**
+
+- List endpoints wrap their results in `data`.
+- Cursor-paginated lists (`GET /user`, `GET /message`) also include `links` and `meta`. Pass `meta.next_cursor` as `?cursor=` to get the next page:
+
+```json
+{
+  "data": [ { "...": "..." } ],
+  "links": { "first": null, "last": null, "prev": null, "next": "https://.../api/user?cursor=eyJ..." },
+  "meta": { "path": "https://.../api/user", "per_page": 20, "next_cursor": "eyJ...", "prev_cursor": null }
+}
+```
+
+- [`GET /me`](#current-user) is also wrapped in `data`.
+- All other endpoints return the object directly.
 
 ---
 
@@ -50,19 +95,24 @@ All routes except `register`, `login`, and the signed attachment download requir
 
 Creates a new user and returns an access token. Rate limited to 5 attempts per email + IP.
 
-| Field      | Type   | Required | Rules                                                                              |
-|------------|--------|----------|------------------------------------------------------------------------------------|
-| `name`     | string | Yes      | Letters and spaces only                                                            |
-| `email`    | string | Yes      | Valid email, must be unique                                                        |
-| `password` | string | Yes      | Min 7 chars, letters, mixed case, numbers, must not appear in a known data leak    |
-| `avatar`   | file   | No       | Image, `image/png` or `image/jpeg`, max 2 MB                                        |
+| Field      | Type   | Required | Rules                                                                           |
+|------------|--------|----------|---------------------------------------------------------------------------------|
+| `name`     | string | Yes      | Letters and spaces only                                                         |
+| `email`    | string | Yes      | Valid email, must be unique                                                     |
+| `password` | string | Yes      | Min 7 chars, letters, mixed case, numbers, must not appear in a known data leak |
+| `avatar`   | file   | No       | Image, `image/png` or `image/jpeg`, max 2 MB                                    |
 
-**Response** `201 Created`
+**Responses**
+
+| Status | When                                                                                     |
+|--------|------------------------------------------------------------------------------------------|
+| `201`  | User created                                                                             |
+| `422`  | Validation failed, or too many attempts (`errors.error` + `errors.try_again` in seconds) |
 
 ```json
 {
   "message": "login successful",
-  "user": { "...": "User object" },
+  "user": { "...": "User object, with avatar" },
   "access_token": "1|abc123...",
   "token_type": "bearer"
 }
@@ -74,14 +124,19 @@ Creates a new user and returns an access token. Rate limited to 5 attempts per e
 
 `POST /login`
 
-Rate limited to 5 attempts per email + IP.
+Rate limited to 5 attempts per email + IP. Clears the user's `last_seen_at` (marks them online).
 
-| Field      | Type   | Required | Rules                          |
-|------------|--------|----------|--------------------------------|
+| Field      | Type   | Required | Rules                           |
+|------------|--------|----------|---------------------------------|
 | `email`    | string | Yes      | Must belong to an existing user |
-| `password` | string | Yes      | —                              |
+| `password` | string | Yes      | —                               |
 
-**Response** `200 OK`
+**Responses**
+
+| Status | When                                                                                                                 |
+|--------|----------------------------------------------------------------------------------------------------------------------|
+| `200`  | Logged in                                                                                                            |
+| `422`  | Validation failed, `errors.error: wrong_password`, or `errors.error: too many login attempts` + `errors.try_again`   |
 
 ```json
 {
@@ -92,8 +147,6 @@ Rate limited to 5 attempts per email + IP.
 }
 ```
 
-**Errors:** `422` with `error: wrong_password`, or `error: too many login attempts` + `try_again` (seconds).
-
 ---
 
 ### Logout
@@ -102,7 +155,12 @@ Rate limited to 5 attempts per email + IP.
 
 Revokes the current token and sets the user's `last_seen_at`.
 
-**Response** `200 OK`
+**Responses**
+
+| Status | When          |
+|--------|---------------|
+| `200`  | Logged out    |
+| `401`  | Not logged in |
 
 ```json
 { "message": "logout successful" }
@@ -114,9 +172,18 @@ Revokes the current token and sets the user's `last_seen_at`.
 
 `GET /me` 🔒
 
-Returns the authenticated user with their `conversations` and `created_conversations` loaded.
+Returns the authenticated user with their `avatar`, `conversations` and `created_conversations` loaded.
 
-**Response** `200 OK` — [User object](#user)
+**Responses**
+
+| Status | When          |
+|--------|---------------|
+| `200`  | OK            |
+| `401`  | Not logged in |
+
+```json
+{ "data": { "...": "User object" } }
+```
 
 ---
 
@@ -128,14 +195,20 @@ Returns the authenticated user with their `conversations` and `created_conversat
 
 `GET /user` 🔒
 
-Searches users by name (excludes yourself). Cursor-paginated, 20 per page.
+Searches users by name (excludes yourself), ordered by name descending. Each user includes their `avatar`. If `search` is omitted, all users are returned. Cursor-paginated, 20 per page.
 
 | Query Param | Type   | Required | Rules                    |
 |-------------|--------|----------|--------------------------|
-| `search`    | string | Yes      | Letters and spaces only  |
+| `search`    | string | No       | Letters and spaces only  |
 | `cursor`    | string | No       | Cursor for the next page |
 
-**Response** `200 OK` — paginated list of [User objects](#user)
+**Responses**
+
+| Status | When                                                          |
+|--------|---------------------------------------------------------------|
+| `200`  | Paginated list of [User objects](#user)                       |
+| `401`  | Not logged in                                                 |
+| `422`  | `search` contains anything other than letters and spaces      |
 
 ---
 
@@ -145,7 +218,13 @@ Searches users by name (excludes yourself). Cursor-paginated, 20 per page.
 
 Returns the user along with the conversations you share with them.
 
-**Response** `200 OK` — [User object](#user)
+**Responses**
+
+| Status | When                                      |
+|--------|-------------------------------------------|
+| `200`  | [User object](#user) with `conversations` |
+| `401`  | Not logged in                             |
+| `404`  | No user with that `friend_id`             |
 
 ---
 
@@ -155,17 +234,23 @@ Returns the user along with the conversations you share with them.
 
 You can only update yourself. All fields are optional, but changing your password requires your current `password`.
 
-| Field          | Type   | Required                        | Rules                                                     |
-|----------------|--------|---------------------------------|-----------------------------------------------------------|
-| `name`         | string | No                              | Letters only                                              |
-| `email`        | string | No                              | Valid email, must be unique                               |
-| `new_password` | string | No                              | Min 7 chars, letters, mixed case, numbers, not leaked     |
-| `password`     | string | Yes, if `new_password` is sent  | Your current password                                     |
-| `avatar`       | file   | No                              | Image, `image/png` or `image/jpeg`, max 2 MB               |
+| Field          | Type   | Required                        | Rules                                                 |
+|----------------|--------|---------------------------------|-------------------------------------------------------|
+| `name`         | string | No                              | Letters only (no spaces)                              |
+| `email`        | string | No                              | Valid email, must be unique                           |
+| `new_password` | string | No                              | Min 7 chars, letters, mixed case, numbers, not leaked |
+| `password`     | string | Yes, if `new_password` is sent  | Your current password                                 |
+| `avatar`       | file   | No                              | Image, `image/png` or `image/jpeg`, max 2 MB          |
 
-**Response** `200 OK` (empty body)
+**Responses**
 
-**Errors:** `422` (empty body) if `new_password` is sent and `password` is incorrect.
+| Status | When                                                                     |
+|--------|--------------------------------------------------------------------------|
+| `200`  | Updated; returns the [User object](#user)                                |
+| `401`  | Not logged in                                                            |
+| `403`  | Trying to update someone else                                            |
+| `404`  | No user with that `friend_id`                                            |
+| `422`  | Validation failed, or `password` is wrong (this case has an empty body)  |
 
 ---
 
@@ -175,7 +260,14 @@ You can only update yourself. All fields are optional, but changing your passwor
 
 You can only delete yourself.
 
-**Response** `204 No Content`
+**Responses**
+
+| Status | When                          |
+|--------|-------------------------------|
+| `204`  | Deleted                       |
+| `401`  | Not logged in                 |
+| `403`  | Trying to delete someone else |
+| `404`  | No user with that `friend_id` |
 
 ---
 
@@ -183,9 +275,14 @@ You can only delete yourself.
 
 `GET /active-users` 🔒
 
-Returns users who are currently logged in. Cached for 60 seconds.
+Returns users who are currently logged in. Cached for 60 seconds. Users are returned as raw models, not [User objects](#user).
 
-**Response** `200 OK`
+**Responses**
+
+| Status | When          |
+|--------|---------------|
+| `200`  | OK            |
+| `401`  | Not logged in |
 
 ```json
 {
@@ -200,19 +297,24 @@ Returns users who are currently logged in. Cached for 60 seconds.
 
 **Roles:** each member has a role of `owner`, `admin`, or `member`. The creator is the `owner`.
 
-| Action                                   | Who can do it       |
-|------------------------------------------|---------------------|
-| View, send typing indicator              | Any active member   |
-| Update, add users, remove users          | `owner` or `admin`  |
-| Delete, restore users, force-delete users| `owner` only        |
+| Action                                    | Who can do it      |
+|-------------------------------------------|--------------------|
+| View, send typing indicator               | Any active member  |
+| Update, add users, remove users           | `owner` or `admin` |
+| Delete, restore users, force-delete users | `owner` only       |
 
 ### List Conversations
 
 `GET /conversation` 🔒
 
-Returns all conversations you belong to, each with its `last_message`.
+Returns all conversations you belong to, each with its `last_message`. Not paginated.
 
-**Response** `200 OK` — list of [Conversation objects](#conversation)
+**Responses**
+
+| Status | When                                                   |
+|--------|--------------------------------------------------------|
+| `200`  | `{ "data": [...] }` of [Conversation objects](#conversation) |
+| `401`  | Not logged in                                          |
 
 ---
 
@@ -220,16 +322,20 @@ Returns all conversations you belong to, each with its `last_message`.
 
 `POST /conversation` 🔒
 
-You are automatically added to `users`. With exactly one other user the conversation is a **direct** conversation; with more it is a **group**. Only one direct conversation can exist between two users.
+You are automatically added to `users`. With exactly one other user the conversation is a **direct** conversation; with more it is a **group**. Only one direct conversation can exist between two users. Broadcasts [`GroupCreated`](#real-time-events).
 
-| Field     | Type          | Required                         | Rules                                        |
-|-----------|---------------|----------------------------------|----------------------------------------------|
-| `users`   | array of int  | Yes                              | At least 1 other user; existing user IDs; no duplicates |
-| `name`    | string        | Yes, if more than 2 users total  | Max 10 chars; ignored for direct conversations |
+| Field   | Type         | Required                        | Rules                                                   |
+|---------|--------------|---------------------------------|---------------------------------------------------------|
+| `users` | array of int | Yes                             | At least 1 other user; existing user IDs; no duplicates |
+| `name`  | string       | Yes, if more than 2 users total | Max 10 chars; ignored for direct conversations          |
 
-**Response** `201 Created` (empty body)
+**Responses**
 
-**Errors:** `422` — `A direct conversation with this user already exists.`
+| Status | When                                                                          |
+|--------|-------------------------------------------------------------------------------|
+| `201`  | Created; returns the [Conversation object](#conversation)                     |
+| `401`  | Not logged in                                                                 |
+| `422`  | Validation failed, or `A direct conversation with this user already exists.`  |
 
 ---
 
@@ -237,16 +343,22 @@ You are automatically added to `users`. With exactly one other user the conversa
 
 `GET /conversation/{id}/messages` 🔒
 
-Returns the conversation with all its messages (newest first) and marks it as read for you.
+Returns the conversation with all its messages (newest first, each with its sender) and marks it as read for you.
 
-| Query Param  | Type | Required | Description                         |
-|--------------|------|----------|-------------------------------------|
-| `created_by` | flag | No       | Include the creator                 |
-| `members`    | flag | No       | Include the list of members         |
+| Query Param  | Type | Required | Description         |
+|--------------|------|----------|---------------------|
+| `created_by` | flag | No       | Include the creator |
 
-Flags only need to be present, e.g. `?members&created_by`.
+Flags only need to be present, e.g. `?created_by`.
 
-**Response** `200 OK` — [Conversation object](#conversation)
+**Responses**
+
+| Status | When                                                 |
+|--------|------------------------------------------------------|
+| `200`  | [Conversation object](#conversation) with `messages` |
+| `401`  | Not logged in                                        |
+| `403`  | You are not an active member                         |
+| `404`  | Conversation not found                               |
 
 ---
 
@@ -256,13 +368,22 @@ Flags only need to be present, e.g. `?members&created_by`.
 
 All fields are optional.
 
-| Field              | Type         | Required | Rules                                                          |
-|--------------------|--------------|----------|----------------------------------------------------------------|
-| `name`             | string       | No       | Max 10 chars                                                   |
-| `make_users_admin` | array of int | No       | Min 1; each must be an active member of this conversation      |
-| `created_by`       | int          | No       | Existing user ID — transfers ownership to that user            |
+| Field              | Type         | Required | Rules                                                                       |
+|--------------------|--------------|----------|-----------------------------------------------------------------------------|
+| `name`             | string       | No       | Max 10 chars                                                                |
+| `make_users_admin` | array of int | No       | Min 1; each must be an active member of this conversation                   |
+| `created_by`       | int          | No       | Existing user ID — transfers ownership to that user (you become a `member`) |
 
-**Response** `200 OK` (empty body)
+**Responses**
+
+| Status | When                                                          |
+|--------|---------------------------------------------------------------|
+| `200`  | Updated; returns the [Conversation object](#conversation)     |
+| `401`  | Not logged in                                                 |
+| `403`  | You are not an `owner` or `admin`                             |
+| `404`  | Conversation not found, or `{ "error": "Record not found." }` |
+| `422`  | Validation failed                                             |
+| `500`  | `{ "error": "Database update failed." }`                      |
 
 ---
 
@@ -270,7 +391,14 @@ All fields are optional.
 
 `DELETE /conversation/{id}` 🔒
 
-**Response** `204 No Content`
+**Responses**
+
+| Status | When                    |
+|--------|-------------------------|
+| `204`  | Deleted                 |
+| `401`  | Not logged in           |
+| `403`  | You are not the `owner` |
+| `404`  | Conversation not found  |
 
 ---
 
@@ -278,13 +406,21 @@ All fields are optional.
 
 `POST /conversation/{id}/users` 🔒
 
-Adds users as `member`s. A direct conversation is turned into a group named `New Group`.
+Adds users as `member`s. A direct conversation is turned into a group named `New Group`. Broadcasts [`UserAdded`](#real-time-events).
 
-| Field       | Type         | Required | Rules                                                              |
-|-------------|--------------|----------|--------------------------------------------------------------------|
+| Field       | Type         | Required | Rules                                                               |
+|-------------|--------------|----------|---------------------------------------------------------------------|
 | `add_users` | array of int | Yes      | Min 1; existing user IDs; not already active members; no duplicates |
 
-**Response** `200 OK` (empty body)
+**Responses**
+
+| Status | When                                                                    |
+|--------|-------------------------------------------------------------------------|
+| `200`  | Added; returns the [Conversation object](#conversation) with `members`  |
+| `401`  | Not logged in                                                           |
+| `403`  | You are not an `owner` or `admin`                                       |
+| `404`  | Conversation not found                                                  |
+| `422`  | Validation failed                                                       |
 
 ---
 
@@ -292,13 +428,23 @@ Adds users as `member`s. A direct conversation is turned into a group named `New
 
 `DELETE /conversation/{id}/users` 🔒
 
-Marks users as having left. If 1 or fewer members remain the conversation is deleted; if exactly 2 remain it becomes a direct conversation.
+Marks users as having left. If 1 or fewer members remain the conversation is deleted; if exactly 2 remain it becomes a direct conversation. Broadcasts [`UserDeleted`](#real-time-events).
 
-| Field          | Type         | Required | Rules                                              |
-|----------------|--------------|----------|----------------------------------------------------|
+| Field          | Type         | Required | Rules                                               |
+|----------------|--------------|----------|-----------------------------------------------------|
 | `delete_users` | array of int | Yes      | Min 1; each must be an active member; no duplicates |
 
-**Response** `200 OK` (empty body), or `204 No Content` if the conversation was deleted.
+**Responses**
+
+| Status | When                                                                      |
+|--------|---------------------------------------------------------------------------|
+| `200`  | Removed; returns the [Conversation object](#conversation) with `members`  |
+| `204`  | Removed, and the conversation was deleted as a result                     |
+| `401`  | Not logged in                                                             |
+| `403`  | You are not an `owner` or `admin`                                         |
+| `404`  | Conversation not found                                                    |
+| `422`  | Validation failed                                                         |
+| `500`  | `{ "error": "Database update failed." }`                                  |
 
 ---
 
@@ -306,13 +452,21 @@ Marks users as having left. If 1 or fewer members remain the conversation is del
 
 `POST /conversation/{id}/restore` 🔒
 
-Re-adds users who were previously removed from the conversation.
+Re-adds users who were previously removed from the conversation. Broadcasts [`UserAdded`](#real-time-events).
 
-| Field   | Type         | Required | Rules                                                     |
-|---------|--------------|----------|-----------------------------------------------------------|
-| `users` | array of int | Yes      | Min 1; each must be a *removed* member; no duplicates     |
+| Field   | Type         | Required | Rules                                                 |
+|---------|--------------|----------|-------------------------------------------------------|
+| `users` | array of int | Yes      | Min 1; each must be a *removed* member; no duplicates |
 
-**Response** `200 OK`
+**Responses**
+
+| Status | When                    |
+|--------|-------------------------|
+| `200`  | Restored                |
+| `401`  | Not logged in           |
+| `403`  | You are not the `owner` |
+| `404`  | Conversation not found  |
+| `422`  | Validation failed       |
 
 ```json
 {
@@ -329,11 +483,19 @@ Re-adds users who were previously removed from the conversation.
 
 Permanently detaches previously removed users from the conversation.
 
-| Field   | Type         | Required | Rules                                                     |
-|---------|--------------|----------|-----------------------------------------------------------|
-| `users` | array of int | Yes      | Min 1; each must be a *removed* member; no duplicates     |
+| Field   | Type         | Required | Rules                                                 |
+|---------|--------------|----------|-------------------------------------------------------|
+| `users` | array of int | Yes      | Min 1; each must be a *removed* member; no duplicates |
 
-**Response** `204 No Content`
+**Responses**
+
+| Status | When                    |
+|--------|-------------------------|
+| `204`  | Removed                 |
+| `401`  | Not logged in           |
+| `403`  | You are not the `owner` |
+| `404`  | Conversation not found  |
+| `422`  | Validation failed       |
 
 ---
 
@@ -341,9 +503,16 @@ Permanently detaches previously removed users from the conversation.
 
 `POST /conversation/{id}/typing` 🔒
 
-Broadcasts a `user.typing` event to other members. Throttled to once every 3 seconds per user per conversation. No body.
+Broadcasts a `user.typing` event to other members. Throttled to once every 3 seconds per user per conversation (extra calls still return `204` but don't broadcast). No body.
 
-**Response** `204 No Content`
+**Responses**
+
+| Status | When                         |
+|--------|------------------------------|
+| `204`  | OK                           |
+| `401`  | Not logged in                |
+| `403`  | You are not an active member |
+| `404`  | Conversation not found       |
 
 ---
 
@@ -352,6 +521,7 @@ Broadcasts a `user.typing` event to other members. Throttled to once every 3 sec
 | Action                | Who can do it                                    |
 |-----------------------|--------------------------------------------------|
 | Send                  | Members of the conversation                      |
+| View                  | Active members of the conversation               |
 | Edit                  | The sender                                       |
 | Delete (soft)         | The sender, or a conversation `owner` or `admin` |
 | Restore, force-delete | A conversation `owner` or `admin`                |
@@ -367,7 +537,12 @@ Returns messages you have sent, with their replies. Cursor-paginated, 10 per pag
 | `attachments` | flag   | No       | Include attachments      |
 | `cursor`      | string | No       | Cursor for the next page |
 
-**Response** `200 OK` — paginated list of [Message objects](#message)
+**Responses**
+
+| Status | When                                          |
+|--------|-----------------------------------------------|
+| `200`  | Paginated list of [Message objects](#message) |
+| `401`  | Not logged in                                 |
 
 ---
 
@@ -375,17 +550,29 @@ Returns messages you have sent, with their replies. Cursor-paginated, 10 per pag
 
 `POST /message` 🔒
 
-Use `multipart/form-data` when sending an attachment.
+Use `multipart/form-data` when sending an attachment. Sending a message:
 
-| Field             | Type   | Required                          | Rules                                                  |
-|-------------------|--------|-----------------------------------|--------------------------------------------------------|
-| `conversation_id` | int    | Yes                               | Existing conversation you are a member of              |
-| `type`            | string | Yes                               | One of `text`, `image`, `file`                         |
-| `body`            | string | Yes, if `type` is `text`          | —                                                      |
-| `attachment`      | file   | Yes, if `type` is `image`/`file`  | Any file                                               |
-| `reply_to`        | int    | No                                | ID of a message in the same conversation               |
+- sets it as the conversation's `last_message`
+- broadcasts [`MessageSent`](#real-time-events) to the conversation
+- if `reply_to` is set, sends a [reply notification](#notifications) to the author of the original message (unless you are replying to yourself)
 
-**Response** `201 Created` (empty body)
+| Field             | Type   | Required                         | Rules                                     |
+|-------------------|--------|----------------------------------|-------------------------------------------|
+| `conversation_id` | int    | Yes                              | Existing conversation you are a member of |
+| `type`            | string | Yes                              | One of `text`, `image`, `file`            |
+| `body`            | string | Yes, if `type` is `text`         | —                                         |
+| `attachment`      | file   | Yes, if `type` is `image`/`file` | Any file                                  |
+| `reply_to`        | int    | No                               | ID of a message in the same conversation  |
+
+**Responses**
+
+| Status | When                                         |
+|--------|----------------------------------------------|
+| `201`  | Sent; returns the [Message object](#message) |
+| `401`  | Not logged in                                |
+| `403`  | You are not a member of the conversation     |
+| `422`  | Validation failed                            |
+| `500`  | The message could not be saved               |
 
 ---
 
@@ -393,16 +580,22 @@ Use `multipart/form-data` when sending an attachment.
 
 `GET /message/{id}` 🔒
 
-Always includes the sender and attachments.
+Always includes the sender (with avatar). Attachments are included for `image`/`file` messages.
 
-| Query Param                | Type | Required | Description                                          |
-|----------------------------|------|----------|------------------------------------------------------|
+| Query Param                | Type | Required | Description                                           |
+|----------------------------|------|----------|-------------------------------------------------------|
 | `conversation_information` | flag | No       | Include the conversation (only shown to admins/owner) |
-| `reply_to`                 | flag | No       | Include the message this one replies to              |
-| `replies`                  | flag | No       | Include replies to this message                      |
-| `attachments`              | flag | No       | Include attachments                                  |
+| `reply_to`                 | flag | No       | Include the message this one replies to               |
+| `replies`                  | flag | No       | Include replies to this message                       |
 
-**Response** `200 OK` — [Message object](#message)
+**Responses**
+
+| Status | When                       |
+|--------|----------------------------|
+| `200`  | [Message object](#message) |
+| `401`  | Not logged in              |
+| `403`  | You are not an active member of the conversation |
+| `404`  | Message not found          |
 
 ---
 
@@ -412,13 +605,21 @@ Always includes the sender and attachments.
 
 Text messages update their `body`; image/file messages replace their `attachment`.
 
-| Field             | Type   | Required | Rules                                      |
-|-------------------|--------|----------|--------------------------------------------|
-| `conversation_id` | int    | Yes      | Existing conversation                      |
-| `body`            | string | No       | Used for text messages                     |
-| `attachment`      | file   | No       | Max 2 MB; used for image/file messages     |
+| Field             | Type   | Required | Rules                                  |
+|-------------------|--------|----------|----------------------------------------|
+| `conversation_id` | int    | Yes      | Existing conversation                  |
+| `body`            | string | No       | Used for text messages                 |
+| `attachment`      | file   | No       | Max 2 MB; used for image/file messages |
 
-**Response** `200 OK` (empty body)
+**Responses**
+
+| Status | When                                            |
+|--------|-------------------------------------------------|
+| `200`  | Updated; returns the [Message object](#message) |
+| `401`  | Not logged in                                   |
+| `403`  | You are not the sender                          |
+| `404`  | Message not found                               |
+| `422`  | Validation failed                               |
 
 ---
 
@@ -428,7 +629,14 @@ Text messages update their `body`; image/file messages replace their `attachment
 
 Soft-deletes the message.
 
-**Response** `204 No Content`
+**Responses**
+
+| Status | When                                        |
+|--------|---------------------------------------------|
+| `204`  | Deleted                                     |
+| `401`  | Not logged in                               |
+| `403`  | You are not the sender, `owner`, or `admin` |
+| `404`  | Message not found                           |
 
 ---
 
@@ -438,7 +646,14 @@ Soft-deletes the message.
 
 Restores a soft-deleted message.
 
-**Response** `200 OK` — [Message object](#message)
+**Responses**
+
+| Status | When                                             |
+|--------|--------------------------------------------------|
+| `201`  | Restored; returns the [Message object](#message) |
+| `401`  | Not logged in                                    |
+| `403`  | You are not an `owner` or `admin`                |
+| `404`  | Message not found                                |
 
 ---
 
@@ -446,57 +661,118 @@ Restores a soft-deleted message.
 
 `DELETE /message/{id}/force_delete` 🔒
 
-**Response** `204 No Content`
+Works on both normal and soft-deleted messages.
+
+**Responses**
+
+| Status | When                              |
+|--------|-----------------------------------|
+| `204`  | Deleted                           |
+| `401`  | Not logged in                     |
+| `403`  | You are not an `owner` or `admin` |
+| `404`  | Message not found                 |
 
 ---
 
 ## Attachments
 
+Every [Attachment object](#attachment) includes a `path`, relative to the storage disk it was saved on:
+
+| Attachment   | Disk     | How to load it                                                     |
+|--------------|----------|--------------------------------------------------------------------|
+| Avatar       | `public` | `{APP_URL}/storage/{path}` — no token needed (requires `php artisan storage:link`) |
+| Message file | `local`  | Private. Use [Download Attachment](#download-attachment) with a bearer token |
+
 ### Download Attachment
 
-`GET /attachments/{id}/download?expires=...&signature=...`
+`GET /attachments/{id}/download` 🔒
 
-Downloads the file under its original name. This route does **not** use a bearer token — it is protected by a signature instead, so it can be used directly in `<img src>` or download links. Don't build this URL yourself; use the `download_url` from an [Attachment object](#attachment).
+Returns the attachment's file inline, with its content type and original file name. Works for both message attachments and avatars. Requires a bearer token, so it can't be used directly in an `<img src>`; fetch it with the token and create an object URL instead. For avatars, the `/storage` URL above is simpler.
 
-**Response** `200 OK` — the file
+| Attachment   | Who can download it                                   |
+|--------------|-------------------------------------------------------|
+| Avatar       | Any logged-in user                                    |
+| Message file | Members of the message's conversation                 |
 
-**Errors:** `403` if the signature is missing, invalid, or expired (after 30 minutes).
+**Responses**
+
+| Status | When                                                 |
+|--------|------------------------------------------------------|
+| `200`  | The file                                             |
+| `401`  | Not logged in                                        |
+| `403`  | Not a member of the message's conversation           |
+| `404`  | Attachment not found, or its file is missing         |
+
+---
+
+## Notifications
+
+Notifications are stored in the `notifications` table and broadcast in real time. They are queued, so `php artisan queue:work` must be running.
+
+| Notification           | Sent to                                    | Triggered by                                                                             |
+|------------------------|--------------------------------------------|------------------------------------------------------------------------------------------|
+| `UserRepliedToMessage` | The author of the message being replied to | [Sending a message](#send-message) with `reply_to` (not sent when replying to yourself)  |
+
+**Channel:** `private-App.Models.User.{id}`, where `{id}` is the numeric user ID. Only that user can subscribe.
+
+```js
+Echo.private(`App.Models.User.${userId}`)
+    .notification((notification) => {
+        // notification.message_id, notification.conversation_id, notification.replier_id
+    });
+```
+
+**Payload**
+
+```json
+{
+  "id": "9b1d6f0e-...",
+  "type": "App\\Notifications\\UserRepliedToMessage",
+  "message_id": 42,
+  "conversation_id": 7,
+  "replier_id": 3
+}
+```
+
+There are no HTTP endpoints for listing notifications or marking them as read yet.
 
 ---
 
 ## Real-time Events
 
-Events are broadcast on private channels. Authenticate channels via `/broadcasting/auth`.
+Events are broadcast on private channels. Authenticate channels with a bearer token via `POST /api/broadcasting/auth`.
 
 **Channels**
 
-| Channel                      | Who can join                        |
-|------------------------------|-------------------------------------|
-| `private-user.{id}`          | The user with that numeric ID       |
-| `private-conversation.{id}`  | Members of that conversation        |
+| Channel                        | Who can join                                  |
+|--------------------------------|-----------------------------------------------|
+| `private-user.{id}`            | The user with that numeric ID                 |
+| `private-conversation.{id}`    | Members of that conversation                  |
+| `private-App.Models.User.{id}` | The user with that numeric ID ([notifications](#notifications)) |
 
 **Events**
 
-| Event          | Channel(s)                                      | Triggered by                            | Payload                                   |
-|----------------|-------------------------------------------------|-----------------------------------------|-------------------------------------------|
-| `GroupCreated` | `user.{id}` for every member                    | Creating a conversation                 | `conversation`                            |
-| `MessageSent`  | `conversation.{id}`                             | Sending a message                       | `message`                                 |
-| `UserAdded`    | `conversation.{id}` + `user.{id}` of each added | Adding or restoring users               | `conversation`, `userIds`                 |
-| `UserDeleted`  | `conversation.{id}` + `user.{id}` of each removed | Removing users                        | `conversationId`, `userIds`               |
-| `user.typing`  | `conversation.{id}`                             | Typing indicator endpoint               | `conversationId`, `userId`, `name`        |
+| Event          | Channel(s)                                        | Triggered by              | Payload                            |
+|----------------|---------------------------------------------------|---------------------------|------------------------------------|
+| `GroupCreated` | `user.{id}` for every member                      | Creating a conversation   | `conversation`                     |
+| `MessageSent`  | `conversation.{id}`                               | Sending a message         | `message`                          |
+| `UserAdded`    | `conversation.{id}` + `user.{id}` of each added   | Adding or restoring users | `conversation`, `userIds`          |
+| `UserDeleted`  | `conversation.{id}` + `user.{id}` of each removed | Removing users            | `conversationId`, `userIds`        |
+| `user.typing`  | `conversation.{id}`                               | Typing indicator endpoint | `conversationId`, `userId`, `name` |
 
-Events are sent to everyone **except** the user who triggered them (except `GroupCreated`, which goes to all members).
+Events are sent to everyone **except** the user who triggered them, except `GroupCreated`, which goes to all members.
 
 ---
 
 ## Enums
 
-| Enum                 | Values                                   |
-|----------------------|------------------------------------------|
-| Message type         | `text`, `image`, `file`                  |
-| Conversation type    | `direct_convo`, `group_convo`            |
-| Conversation role    | `owner`, `admin`, `member`               |
-| Avatar image types   | `image/png`, `image/jpeg`                |
+| Enum                  | Values                        |
+|-----------------------|-------------------------------|
+| Message type          | `text`, `image`, `file`       |
+| Conversation type     | `direct_convo`, `group_convo` |
+| Conversation role     | `owner`, `admin`, `member`    |
+| Attachment collection | `avatar`, `attachment`        |
+| Avatar image types    | `image/png`, `image/jpeg`     |
 
 ---
 
@@ -511,12 +787,14 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "name": "Jane Doe",
   "email": "jane@example.com",
   "friend_id": "jane-doe-1234",
+  "avatar": {},
   "last_seen_at": "2026-09-27T10:00:00Z",
   "conversations": [],
   "created_conversations": []
 }
 ```
 
+- `avatar` — *optional*, an [Attachment object](#attachment)
 - `last_seen_at` — *optional*, only shown when the user is offline
 - `conversations`, `created_conversations` — *optional*
 
@@ -566,16 +844,22 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "file_name": "abc123.png",
   "mime_type": "png",
   "size": 20480,
-  "download_url": "https://..."
+  "path": "attachments/abc123.png"
 }
 ```
 
-- `download_url` — a signed URL valid for 30 minutes (see [Download Attachment](#download-attachment))
+- `path` — relative to the storage disk; see [Attachments](#attachments) for how to load it
 
+---
 
-# To run the back end
-- php artisan serve
-- php artisan queue:work
-- php artisan reverb:start --debug
-- php artisan schedule:work     
+## Running the Backend
 
+```sh
+php artisan migrate               # includes the notifications table
+php artisan storage:link          # serves avatars from /storage
+php artisan serve
+php artisan queue:work            # broadcasts + notifications
+php artisan reverb:start --debug
+php artisan schedule:work
+ngrok http 8080
+```

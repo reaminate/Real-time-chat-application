@@ -38,9 +38,9 @@ class UserService
     protected function storeAvatarFor(UpdateUserRequest $request, User $user): void
     {
         $file = $request->file('avatar');
-        $path = $file->store('avatars', 'local');
+        $path = $file->store('avatars', 'public');
 
-        $user->avatar()->update([
+        $user->avatar()->updateOrCreate([], [
             'collection' => AttachmentCollectionEnum::AVATAR,
             'original_name' => $file->getClientOriginalName(),
             'file_name' => basename($path),

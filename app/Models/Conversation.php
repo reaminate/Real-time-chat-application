@@ -44,6 +44,8 @@ class Conversation extends Model
     }
     /**
      * returns all the users, even the ones that left, but havent been fully deleted
+     * 
+     * used for detaching
      */
     public function allUsers(): BelongsToMany
     {

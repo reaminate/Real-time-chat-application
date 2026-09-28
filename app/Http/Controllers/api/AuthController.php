@@ -70,7 +70,7 @@ class AuthController extends Controller
     public function meSelf()
     {
         $user = Auth::user();
-        $user->load(['conversations', 'createdConversations']);
+        $user->load(['conversations', 'createdConversations', 'avatar']);
         return UserResource::make($user);
     }
 }

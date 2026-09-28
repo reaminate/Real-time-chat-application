@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MessageTypeEnum;
 use App\Events\MessageSent;
 use App\Http\Resources\MessageResource;
 use App\Models\Message;
@@ -42,7 +43,7 @@ class MessageController extends Controller
 
         $message = $service->store($validated, $request);
         broadcast(new MessageSent($message))->toOthers();
-        return response('', 201);
+        return response()->json(MessageResource::make($message), 201);
     }
 
     /**
@@ -56,10 +57,12 @@ class MessageController extends Controller
         $message->load(['user.avatar', 'attachments'])
         ->when($request->has('conversation_information'), fn($query) => $query->load('conversation'))
         ->when($request->has('reply_to'), fn($query) => $query->load('replyTo'))
-        ->when($request->has('replies'), fn($query) => $query->load('replies'))
-        ->when($request->has('attachments'), fn($query) => $query->load('attachments'));
+        ->when($request->has('replies'), fn($query) => $query->load('replies'));
+        if($message->__get('type') != MessageTypeEnum::TEXT->value){
+            $message->load('attachments');
+        }
 
-        return MessageResource::make($message);
+        return response()->json(MessageResource::make($message), 200);
     }
 
     /**
@@ -71,8 +74,8 @@ class MessageController extends Controller
             abort(403);
         }
         $validated = $request->validated();
-        $service->update($validated, $request, $message);
-        return response('', 200);
+        $message = $service->update($validated, $request, $message);
+        return response()->json(MessageResource::make($message), 200);
     }
 
     /**
@@ -107,7 +110,7 @@ class MessageController extends Controller
             abort(403);
         }
         $message->restore();
-        return MessageResource::make($message);
+        return response()->json(MessageResource::make($message), 201);
     }
     
     

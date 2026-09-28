@@ -23,7 +23,7 @@ class UserSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['required', 'string', 'regex:/^[\pL\s]+$/u', 'min:1'],
+            'search' => ['sometimes', 'string', 'regex:/^[\pL\s]+$/u', 'min:1'],
         ];
     }
 }

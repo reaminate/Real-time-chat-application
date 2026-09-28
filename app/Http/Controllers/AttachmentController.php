@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AttachmentCollectionEnum;
 use App\Models\Attachment;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class AttachmentController extends Controller
@@ -47,9 +50,21 @@ class AttachmentController extends Controller
     // {
     //     //
     // }
-    public function download(Attachment $attachment)
+    /**
+     * streams the file, avatars live on the public disk and message attachments on the local disk
+     */
+    public function download(Attachment $attachment, Request $request)
     {
-        return Storage::disk('local')->download($attachment->path, $attachment->original_name);
+        if($request->user()->cannot('view', $attachment)){
+            abort(403);
+        }
+        /** @var FilesystemAdapter $storage */
+        $storage = Storage::disk($attachment->__get('collection') === AttachmentCollectionEnum::AVATAR ? 'public' : 'local');
+        $path = $attachment->__get('path');
+        if(!$storage->exists($path)){
+            abort(404);
+        }
+        return $storage->response($path, $attachment->__get('original_name'));
     }
 
 }

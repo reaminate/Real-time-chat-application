@@ -56,7 +56,7 @@ class AuthService
         }
 
         $file = $request->file('avatar');
-        $path = $file->store('avatars', 'local');
+        $path = $file->store('avatars', 'public');
 
         return $user->avatar()->create([
             'collection' => AttachmentCollectionEnum::AVATAR,

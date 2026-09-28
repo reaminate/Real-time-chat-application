@@ -4,18 +4,18 @@ use App\Http\Controllers\api\AuthController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::get('/attachments/{attachment}/download', [AttachmentController::class, 'download'])
-    ->name('attachments.download')
-    ->middleware('signed');
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/attachments/{attachment}/download', [AttachmentController::class, 'download']);
     Route::get('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'meSelf']);
     Route::get('/active-users', [UserController::class, 'currentlyActive']);
+    Route::get('/notifications', [NotificationController::class, 'notifications']);
     Route::apiResource('/user', UserController::class)->except('store');
            
     Route::controller(MessageController::class)->group(function(){

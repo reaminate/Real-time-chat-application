@@ -23,7 +23,8 @@ class UserController extends Controller
         }
         $string_of_letters = $request->validated('search');
         $string_of_letters = "%$string_of_letters%";
-        $users = User::whereLike('name', $string_of_letters)->whereNot('name', $request->user()->__get('name'))->orderByDesc('name')->cursorPaginate(20);
+        $users = User::whereLike('name', $string_of_letters)->whereNot('name', $request->user()->__get('name'))->orderByDesc('name')->with('avatar')->cursorPaginate(20);
+
         return UserResource::collection($users);
     }
 
@@ -51,7 +52,7 @@ class UserController extends Controller
             $query->whereHas('users', fn($query) => $query->where('users.id', $authId));
         }])->cursorPaginate(20);
 
-        return UserResource::make($user);
+        return response()->json(UserResource::make($user), 200);
     }
 
     /**
@@ -67,7 +68,7 @@ class UserController extends Controller
             return response('', 422);
         }
         $service->update($validated, $request, $user);
-        return response('', 200);
+        return response()->json(UserResource::make($user), 200);
     }
 
     /**
