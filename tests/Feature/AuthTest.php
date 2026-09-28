@@ -45,7 +45,7 @@ class AuthTest extends TestCase
     public function test_register_stores_avatar_attachment(): void
     {
         $this->fakePwnedPasswords();
-        Storage::fake('local');
+        Storage::fake('public');
 
         $this->post('/api/register', [
             'name' => 'Jane Doe',
@@ -56,7 +56,7 @@ class AuthTest extends TestCase
 
         $user = User::where('email', 'jane@example.com')->sole();
         $this->assertSame(AttachmentCollectionEnum::AVATAR, $user->avatar->collection);
-        Storage::disk('local')->assertExists($user->avatar->path);
+        Storage::disk('public')->assertExists($user->avatar->path);
     }
 
     public function test_register_rejects_empty_payload_with_422(): void

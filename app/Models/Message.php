@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['conversation_id', 'sender_id', 'reply_to', 'type', 'body', 'edited_at'])]
+#[Fillable(['conversation_id', 'sender_id', 'reply_to', 'type', 'body', 'is_pinned','edited_at'])]
 class Message extends Model
 {
     /** @use HasFactory<\Database\Factories\MessageFactory> */
@@ -20,6 +20,7 @@ class Message extends Model
 
     protected $casts =
     [
+        'is_pinned' => 'boolean',
         'type' => MessageTypeEnum::class,
         'edited_at' => 'datetime',
     ];

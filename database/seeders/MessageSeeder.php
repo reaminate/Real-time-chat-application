@@ -42,6 +42,7 @@ class MessageSeeder extends Seeder
                     'sender_id' => $senderIds->random(),
                     'created_at' => $sentAt,
                     'updated_at' => $sentAt,
+                    'is_pinned' => fake()->boolean(10),
                     'deleted_at' => random_int(1, 100) <= 5 ? $sentAt : null,
                 ]));
             }

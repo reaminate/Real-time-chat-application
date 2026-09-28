@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Attachment;
+use App\Models\ConversationMember;
+use App\Models\Message;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AttachmentTest extends TestCase
@@ -23,30 +26,60 @@ class AttachmentTest extends TestCase
         ]);
     }
 
-    public function test_signed_url_downloads_file_with_original_name(): void
+    private function memberOf(Attachment $attachment): User
     {
-        $attachment = $this->storedAttachment();
-        $url = URL::temporarySignedRoute('attachments.download', now()->addMinutes(30), ['attachment' => $attachment->id]);
+        $user = User::factory()->create();
+        ConversationMember::factory()->create([
+            'user_id' => $user->id,
+            'conversation_id' => Message::findOrFail($attachment->attachable_id)->conversation_id,
+        ]);
 
-        $this->get($url)
-            ->assertOk()
-            ->assertDownload('report.pdf');
+        return $user;
     }
 
-    public function test_unsigned_url_is_rejected(): void
+    public function test_member_downloads_message_attachment(): void
     {
         $attachment = $this->storedAttachment();
+        Sanctum::actingAs($this->memberOf($attachment));
+
+        $this->get("/api/attachments/{$attachment->id}/download")
+            ->assertOk()
+            ->assertStreamedContent('file contents');
+    }
+
+    public function test_non_member_is_forbidden_with_403(): void
+    {
+        $attachment = $this->storedAttachment();
+        Sanctum::actingAs(User::factory()->create());
 
         $this->getJson("/api/attachments/{$attachment->id}/download")->assertForbidden();
     }
 
-    public function test_expired_url_is_rejected(): void
+    public function test_any_user_downloads_avatar_from_public_disk(): void
+    {
+        Storage::fake('public');
+        $avatar = Attachment::factory()->avatar()->create();
+        Storage::disk('public')->put($avatar->path, 'avatar contents');
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->get("/api/attachments/{$avatar->id}/download")
+            ->assertOk()
+            ->assertStreamedContent('avatar contents');
+    }
+
+    public function test_missing_file_returns_404(): void
     {
         $attachment = $this->storedAttachment();
-        $url = URL::temporarySignedRoute('attachments.download', now()->addMinutes(30), ['attachment' => $attachment->id]);
+        Storage::disk('local')->delete($attachment->path);
+        Sanctum::actingAs($this->memberOf($attachment));
 
-        $this->travel(31)->minutes();
+        $this->getJson("/api/attachments/{$attachment->id}/download")->assertNotFound();
+    }
 
-        $this->getJson($url)->assertForbidden();
+    public function test_returns_401_without_token(): void
+    {
+        $attachment = $this->storedAttachment();
+
+        $this->getJson("/api/attachments/{$attachment->id}/download")->assertUnauthorized();
     }
 }

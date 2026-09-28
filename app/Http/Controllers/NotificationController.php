@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Conversation;
+use App\Models\User;
+use App\Notifications\PingUser;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -15,5 +18,13 @@ class NotificationController extends Controller
         }
         return $notifications;
     }
-    
+    public function notifyUser(Request $request, User $user, Conversation $conversation) 
+    {
+        if($request->user()->cannot('notifyUser', [$user, $conversation])) //taken from user policy.
+        {
+            abort(403);
+        }
+        $user->notify(new PingUser($request->user(),$conversation));
+        return response()->noContent();
+    }
 }

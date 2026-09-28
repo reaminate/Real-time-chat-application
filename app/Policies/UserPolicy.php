@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
@@ -61,5 +62,12 @@ class UserPolicy
     public function forceDelete(User $user, User $model): bool
     {
         return false;
+    }
+
+    public function notifyUser(User $user, User $model, Conversation $conversation): bool
+    {
+        if ($user->id === $model->id) return false;
+
+        return $conversation->users()->whereIn('users.id', [$user->__get('id'), $model->__get('id')])->count() === 2;
     }
 }

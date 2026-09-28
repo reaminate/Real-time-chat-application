@@ -16,8 +16,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'meSelf']);
     Route::get('/active-users', [UserController::class, 'currentlyActive']);
     Route::get('/notifications', [NotificationController::class, 'notifications']);
+    Route::post('/notify/{user}/in/{conversation}', [NotificationController::class, 'notifyUser']);
     Route::apiResource('/user', UserController::class)->except('store');
-           
+    Route::prefix('pin')->group(function(){
+        Route::controller(ConversationController::class)->group(function(){
+            Route::put('/{conversation}/add', 'pinMessage');
+            Route::put('/{conversation}/remove', 'removePinMessage');
+            Route::get('/{conversation}/pinned', 'viewPinnedOnly');
+        });
+    });
     Route::controller(MessageController::class)->group(function(){
         Route::get('/message/{message}/restore', 'restore')->withTrashed();
         Route::delete('/message/{message}/force_delete', 'forceDelete')->withTrashed();

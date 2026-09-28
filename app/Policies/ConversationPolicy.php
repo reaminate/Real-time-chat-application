@@ -87,7 +87,11 @@ class ConversationPolicy
         return true;
     }
     
-
+    public function pin(User $user, Conversation $conversation):bool 
+    {
+        return $this->isAdmin($user, $conversation);
+    }
+    
     /**
      * checks if the its the owner of the convo
      * @param User $user

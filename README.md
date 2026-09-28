@@ -1,6 +1,6 @@
 # RTC App — API Documentation
 
-A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, reply notifications, typing indicators, and real-time broadcasting over private channels.
+A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, pinned messages, reply notifications, tagging users, typing indicators, and real-time broadcasting over private channels.
 
 ## Table of Contents
 
@@ -299,8 +299,8 @@ Returns users who are currently logged in. Cached for 60 seconds. Users are retu
 
 | Action                                    | Who can do it      |
 |-------------------------------------------|--------------------|
-| View, send typing indicator               | Any active member  |
-| Update, add users, remove users           | `owner` or `admin` |
+| View, send typing indicator, view pinned  | Any active member  |
+| Update, add users, remove users, pin      | `owner` or `admin` |
 | Delete, restore users, force-delete users | `owner` only       |
 
 ### List Conversations
@@ -516,6 +516,67 @@ Broadcasts a `user.typing` event to other members. Throttled to once every 3 sec
 
 ---
 
+### Pin Message
+
+`PUT /pin/{id}/add` 🔒
+
+Pins a message in the conversation `{id}`. Any number of messages can be pinned at once, and pinning a message that is already pinned does nothing.
+
+| Field         | Type | Required | Rules                                                   |
+|---------------|------|----------|---------------------------------------------------------|
+| `pin_message` | int  | Yes      | ID of a message in this conversation; not deleted       |
+
+**Responses**
+
+| Status | When                                                       |
+|--------|------------------------------------------------------------|
+| `200`  | Pinned; returns the [Conversation object](#conversation)   |
+| `401`  | Not logged in                                              |
+| `403`  | You are not an `owner` or `admin`                          |
+| `404`  | Conversation not found                                     |
+| `422`  | Validation failed                                          |
+
+---
+
+### Unpin Message
+
+`PUT /pin/{id}/remove` 🔒
+
+Unpins a message in the conversation `{id}`.
+
+| Field                | Type | Required | Rules                                                          |
+|----------------------|------|----------|----------------------------------------------------------------|
+| `remove_pin_message` | int  | Yes      | ID of a *pinned* message in this conversation; not deleted     |
+
+**Responses**
+
+| Status | When                                                       |
+|--------|------------------------------------------------------------|
+| `200`  | Unpinned; returns the [Conversation object](#conversation) |
+| `401`  | Not logged in                                              |
+| `403`  | You are not an `owner` or `admin`                          |
+| `404`  | Conversation not found                                     |
+| `422`  | Validation failed, including when the message isn't pinned |
+
+---
+
+### List Pinned Messages
+
+`GET /pin/{id}/pinned` 🔒
+
+Returns the conversation with only its pinned messages (newest first, each with its sender). Unlike [Get Conversation with Messages](#get-conversation-with-messages), this doesn't mark the conversation as read.
+
+**Responses**
+
+| Status | When                                                        |
+|--------|-------------------------------------------------------------|
+| `200`  | [Conversation object](#conversation) with pinned `messages` |
+| `401`  | Not logged in                                               |
+| `403`  | You are not an active member                                |
+| `404`  | Conversation not found                                      |
+
+---
+
 ## Messages
 
 | Action                | Who can do it                                    |
@@ -712,17 +773,78 @@ Notifications are stored in the `notifications` table and broadcast in real time
 | Notification           | Sent to                                    | Triggered by                                                                             |
 |------------------------|--------------------------------------------|------------------------------------------------------------------------------------------|
 | `UserRepliedToMessage` | The author of the message being replied to | [Sending a message](#send-message) with `reply_to` (not sent when replying to yourself)  |
+| `PingUser`             | The tagged user                            | [Tagging a user](#tag-a-user) in a conversation                                          |
+
+### Tag a User
+
+`POST /notify/{friend_id}/in/{conversation_id}` 🔒
+
+Tags (pings) another user in a conversation, sending them a `PingUser` notification. Both you and the tagged user must be active members of the conversation, and you can't tag yourself. No body.
+
+**Responses**
+
+| Status | When                                                                       |
+|--------|----------------------------------------------------------------------------|
+| `204`  | Tagged                                                                     |
+| `401`  | Not logged in                                                              |
+| `403`  | Tagging yourself, or you or the tagged user is not an active member        |
+| `404`  | No user with that `friend_id`, or conversation not found                   |
+
+---
+
+### List Unread Notifications
+
+`GET /notifications` 🔒
+
+Returns your unread notifications and marks them as read, so each notification is only returned once. Not wrapped in `data`.
+
+**Responses**
+
+| Status | When          |
+|--------|---------------|
+| `200`  | OK            |
+| `401`  | Not logged in |
+
+```json
+[
+  {
+    "id": "9b1d6f0e-...",
+    "type": "App\\Notifications\\PingUser",
+    "notifiable_type": "App\\Models\\User",
+    "notifiable_id": 5,
+    "data": { "user": 3, "conversation": 7 },
+    "read_at": "2026-09-28T10:00:00.000000Z",
+    "created_at": "2026-09-28T09:58:00.000000Z",
+    "updated_at": "2026-09-28T10:00:00.000000Z"
+  }
+]
+```
+
+`data` holds the same fields as the real-time payload below.
+
+---
+
+### Real-time Notifications
 
 **Channel:** `private-App.Models.User.{id}`, where `{id}` is the numeric user ID. Only that user can subscribe.
 
 ```js
 Echo.private(`App.Models.User.${userId}`)
     .notification((notification) => {
-        // notification.message_id, notification.conversation_id, notification.replier_id
+        switch (notification.type) {
+            case 'App\\Notifications\\UserRepliedToMessage':
+                // notification.message_id, notification.conversation_id, notification.replier_id
+                break;
+            case 'App\\Notifications\\PingUser':
+                // notification.user (who tagged you), notification.conversation
+                break;
+        }
     });
 ```
 
-**Payload**
+**Payloads**
+
+`UserRepliedToMessage`:
 
 ```json
 {
@@ -734,7 +856,19 @@ Echo.private(`App.Models.User.${userId}`)
 }
 ```
 
-There are no HTTP endpoints for listing notifications or marking them as read yet.
+`PingUser`:
+
+```json
+{
+  "id": "4c2a8e1b-...",
+  "type": "App\\Notifications\\PingUser",
+  "user": 3,
+  "conversation": 7
+}
+```
+
+- `user` — numeric ID of the user who tagged you
+- `conversation` — numeric ID of the conversation you were tagged in
 
 ---
 
@@ -748,7 +882,7 @@ Events are broadcast on private channels. Authenticate channels with a bearer to
 |--------------------------------|-----------------------------------------------|
 | `private-user.{id}`            | The user with that numeric ID                 |
 | `private-conversation.{id}`    | Members of that conversation                  |
-| `private-App.Models.User.{id}` | The user with that numeric ID ([notifications](#notifications)) |
+| `private-App.Models.User.{id}` | The user with that numeric ID ([notifications](#real-time-notifications)) |
 
 **Events**
 
@@ -825,6 +959,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "replies": [],
   "type": "text",
   "body": "Hello!",
+  "is_pinned": false,
   "edited_at": "2026-09-27T10:05:00Z"
 }
 ```
@@ -832,6 +967,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 - `body` — the text for `text` messages, or a list of [Attachment objects](#attachment) for `image`/`file` messages
 - `conversation_more_information` — *optional*, only shown to conversation admins/owner
 - `sender`, `reply_to`, `replies` — *optional*
+- `is_pinned` — whether the message is pinned in its conversation (see [Pin Message](#pin-message))
 - `edited_at` — *optional*, only shown if the message was edited
 
 ### Attachment

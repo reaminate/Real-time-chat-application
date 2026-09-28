@@ -22,9 +22,10 @@ class MessageResource extends JsonResource
                 ConversationResource::make($this->whenLoaded('conversation'))),
             'sender' => UserResource::make($this->whenLoaded('user')),
             'reply_to' => $this->whenLoaded('replyTo', fn ($m) => MessageResource::make($m)),
-            'replies' => $this->whenLoaded('replies', fn ($m) => MessageResource::make($m)),
+            'replies' => $this->whenLoaded('replies', fn ($m) => MessageResource::collection($m)),
             'type' => $this->__get('type'),
             'body' => $this->__get('body') ?? AttachmentResource::collection($this->whenLoaded('attachments')),
+            'is_pinned' => $this->__get('is_pinned'),
             'edited_at' => $this->when($this->__get('edited_at')!=null, $this->__get('edited_at')),
         ];
     }

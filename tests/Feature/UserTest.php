@@ -56,11 +56,12 @@ class UserTest extends TestCase
             ->assertJsonPath('data.0.name', 'Alice Jones');
     }
 
-    public function test_index_rejects_missing_search_with_422(): void
+    public function test_index_without_search_lists_all_other_users(): void
     {
         Sanctum::actingAs(User::factory()->create());
+        User::factory(2)->create();
 
-        $this->getJson('/api/user')->assertUnprocessable()->assertJsonValidationErrors('search');
+        $this->getJson('/api/user')->assertOk()->assertJsonCount(2, 'data');
     }
 
     public function test_index_rejects_non_letter_search_with_422(): void
@@ -77,8 +78,8 @@ class UserTest extends TestCase
 
         $this->getJson('/api/user/bobbrown')
             ->assertOk()
-            ->assertJsonPath('data.email', $other->email)
-            ->assertJsonPath('data.friend_id', 'bobbrown');
+            ->assertJsonPath('email', $other->email)
+            ->assertJsonPath('friend_id', 'bobbrown');
     }
 
     public function test_show_returns_404_for_unknown_friend_id(): void

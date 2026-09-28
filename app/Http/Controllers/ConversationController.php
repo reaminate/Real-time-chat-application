@@ -9,6 +9,8 @@ use App\Events\UserTyping;
 use App\Http\Requests\AddUsersRequest;
 use App\Http\Requests\DeleteUsersRequest;
 use App\Http\Requests\ForceDeleteOrRestoreUserInConversationRequest;
+use App\Http\Requests\PinMessageRequest;
+use App\Http\Requests\RemovePinRequest;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
 use App\Http\Requests\UserSearchRequest;
@@ -186,5 +188,35 @@ class ConversationController extends Controller
         }
 
         return response()->noContent();
+    }
+
+    public function pinMessage(PinMessageRequest $request, Conversation $conversation)
+    {
+        if($request->user()->cannot('pin', $conversation)){
+            abort(403);
+        }
+        $validated = $request->validated();
+        $conversation->messages()->whereKey($validated['pin_message'])->update(['is_pinned' => true]);
+        return response()->json(ConversationResource::make($conversation), 200);
+    }
+    
+    public function removePinMessage(RemovePinRequest $request, Conversation $conversation)
+    {
+        if($request->user()->cannot('pin', $conversation)){
+            abort(403);
+        }
+        $validated = $request->validated();
+        $conversation->messages()->whereKey($validated['remove_pin_message'])->update(['is_pinned' => false]);
+        return response()->json(ConversationResource::make($conversation), 200);
+    }
+
+    public function viewPinnedOnly(Request $request, Conversation $conversation)
+    {
+        if($request->user()->cannot('view', $conversation)){
+            abort(403);
+        }
+        $conversation->load(['messages' => fn ($q) => $q->latest()->where('is_pinned', true)->with('user')]);
+
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 }

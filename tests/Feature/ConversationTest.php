@@ -48,6 +48,9 @@ class ConversationTest extends TestCase
             'typing' => ['postJson', '/api/conversation/1/typing'],
             'restore' => ['postJson', '/api/conversation/1/restore'],
             'force delete' => ['deleteJson', '/api/conversation/1/force_delete'],
+            'pin' => ['putJson', '/api/pin/1/add'],
+            'remove pin' => ['putJson', '/api/pin/1/remove'],
+            'pinned' => ['getJson', '/api/pin/1/pinned'],
         ];
     }
 
@@ -152,11 +155,10 @@ class ConversationTest extends TestCase
         $conversation->update(['last_message_id' => $message->id]);
         Sanctum::actingAs($me);
 
-        $this->getJson("/api/conversation/{$conversation->id}/messages?members")
+        $this->getJson("/api/conversation/{$conversation->id}/messages")
             ->assertOk()
-            ->assertJsonCount(1, 'data.messages')
-            ->assertJsonPath('data.messages.0.body', $message->body)
-            ->assertJsonCount(2, 'data.members');
+            ->assertJsonCount(1, 'messages')
+            ->assertJsonPath('messages.0.body', $message->body);
 
         $this->assertSame($message->id, ConversationMember::where('user_id', $me->id)->sole()->last_read_id);
     }
@@ -364,6 +366,120 @@ class ConversationTest extends TestCase
         $this->postJson("/api/conversation/{$conversation->id}/typing")->assertForbidden();
 
         Event::assertNotDispatched(UserTyping::class);
+    }
+
+    // pin
+
+    public function test_pin_marks_message_as_pinned_and_allows_several_pins(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $conversation = $this->groupWith($me, $other);
+        [$first, $second] = Message::factory(2)->create(['conversation_id' => $conversation->id, 'sender_id' => $other->id]);
+        Sanctum::actingAs($me);
+
+        $this->putJson("/api/pin/{$conversation->id}/add", ['pin_message' => $first->id])->assertOk();
+        $this->putJson("/api/pin/{$conversation->id}/add", ['pin_message' => $second->id])->assertOk();
+
+        $this->assertTrue($first->fresh()->is_pinned);
+        $this->assertTrue($second->fresh()->is_pinned);
+    }
+
+    public function test_pin_rejects_message_from_another_conversation_with_422(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $conversation = $this->groupWith($me, $other);
+        $foreign = Message::factory()->create();
+        Sanctum::actingAs($me);
+
+        $this->putJson("/api/pin/{$conversation->id}/add", [
+            'pin_message' => $foreign->id,
+            'conversation_id' => $foreign->conversation_id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('pin_message');
+
+        $this->assertFalse($foreign->fresh()->is_pinned);
+    }
+
+    public function test_pin_rejects_soft_deleted_message_with_422(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $conversation = $this->groupWith($me, $other);
+        $message = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $other->id]);
+        $message->delete();
+        Sanctum::actingAs($me);
+
+        $this->putJson("/api/pin/{$conversation->id}/add", ['pin_message' => $message->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('pin_message');
+    }
+
+    public function test_pin_forbids_plain_member_with_403(): void
+    {
+        [$owner, $member] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, $member);
+        $message = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $owner->id]);
+        Sanctum::actingAs($member);
+
+        $this->putJson("/api/pin/{$conversation->id}/add", ['pin_message' => $message->id])->assertForbidden();
+
+        $this->assertFalse($message->fresh()->is_pinned);
+    }
+
+    public function test_remove_pin_unpins_message(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $conversation = $this->groupWith($me, $other);
+        $message = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $other->id, 'is_pinned' => true]);
+        Sanctum::actingAs($me);
+
+        $this->putJson("/api/pin/{$conversation->id}/remove", ['remove_pin_message' => $message->id])->assertOk();
+
+        $this->assertFalse($message->fresh()->is_pinned);
+    }
+
+    public function test_remove_pin_rejects_message_that_is_not_pinned_with_422(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $conversation = $this->groupWith($me, $other);
+        $message = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $other->id]);
+        Sanctum::actingAs($me);
+
+        $this->putJson("/api/pin/{$conversation->id}/remove", ['remove_pin_message' => $message->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('remove_pin_message');
+    }
+
+    public function test_remove_pin_forbids_plain_member_with_403(): void
+    {
+        [$owner, $member] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, $member);
+        $message = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $owner->id, 'is_pinned' => true]);
+        Sanctum::actingAs($member);
+
+        $this->putJson("/api/pin/{$conversation->id}/remove", ['remove_pin_message' => $message->id])->assertForbidden();
+
+        $this->assertTrue($message->fresh()->is_pinned);
+    }
+
+    public function test_pinned_returns_only_pinned_messages_to_member(): void
+    {
+        [$owner, $member] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, $member);
+        $pinned = Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $owner->id, 'is_pinned' => true]);
+        Message::factory()->create(['conversation_id' => $conversation->id, 'sender_id' => $owner->id]);
+        Sanctum::actingAs($member);
+
+        $this->getJson("/api/pin/{$conversation->id}/pinned")
+            ->assertOk()
+            ->assertJsonCount(1, 'messages')
+            ->assertJsonPath('messages.0.body', $pinned->body);
+    }
+
+    public function test_pinned_forbids_non_member_with_403(): void
+    {
+        $conversation = $this->groupWith(User::factory()->create());
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson("/api/pin/{$conversation->id}/pinned")->assertForbidden();
     }
 
     // destroy

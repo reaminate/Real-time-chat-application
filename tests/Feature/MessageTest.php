@@ -188,8 +188,8 @@ class MessageTest extends TestCase
 
         $this->getJson("/api/message/{$message->id}")
             ->assertOk()
-            ->assertJsonPath('data.body', $message->body)
-            ->assertJsonPath('data.sender.email', $other->email);
+            ->assertJsonPath('body', $message->body)
+            ->assertJsonPath('sender.email', $other->email);
     }
 
     public function test_show_returns_404_for_unknown_message(): void
@@ -308,8 +308,8 @@ class MessageTest extends TestCase
         Sanctum::actingAs($admin);
 
         $this->getJson("/api/message/{$message->id}/restore")
-            ->assertOk()
-            ->assertJsonPath('data.body', $message->body);
+            ->assertCreated()
+            ->assertJsonPath('body', $message->body);
 
         $this->assertNotSoftDeleted($message);
     }
