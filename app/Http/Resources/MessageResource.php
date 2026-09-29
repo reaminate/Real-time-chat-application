@@ -17,6 +17,7 @@ class MessageResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            'id' => $this->__get('id'),
             'conversation_id' => $this->__get('conversation_id'),
             'conversation_more_information' => $this->when($this->isConversationAdmin($request->user()), 
                 ConversationResource::make($this->whenLoaded('conversation'))),

@@ -3,11 +3,10 @@
 use App\Models\Conversation;
 use Illuminate\Support\Facades\Broadcast;
 
-// compares raw ids: User's route key is friend_id, so model binding would look up the wrong column
 Broadcast::channel('user.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
-// default channel for broadcast notifications (e.g. UserRepliedToMessage)
+// default channel for broadcast notifications 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });

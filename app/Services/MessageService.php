@@ -13,6 +13,8 @@ use App\Models\Message;
 use App\Models\User;
 use App\Notifications\UserRepliedToMessage;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 
 class MessageService
 {
@@ -36,6 +38,8 @@ class MessageService
         unset($validated['attachment']);
 
         $validated['sender_id'] = $request->user()->__get('id');
+        $lock = Cache::lock('sending_message'.$validated['sender_id'], 5);
+        throw_if(!$lock->get(), ValidationException::class);
         $message = Message::create($validated);
         if(!$message->exists){
             abort(500);
@@ -54,7 +58,9 @@ class MessageService
         $message->conversation()->update(['last_message_id'=> $message->__get('id')]);
         if($validated['type'] != MessageTypeEnum::TEXT->value){
             $this->storeAttachmentFor($request, $message);
+            $message->load('attachments');
         }
+        $lock->release();
         return $message;
     }
 
@@ -73,6 +79,7 @@ class MessageService
         } else {
             unset($validated['body']);
             $this->storeAttachmentFor($request, $message, update: true);
+            $message->load('attachments');
         }
         return $message;
     }
@@ -86,6 +93,7 @@ class MessageService
      */
     protected function storeAttachmentFor(StoreMessageRequest|UpdateMessageRequest $request, Message $message, bool $update = false): ?Attachment
     {
+        //an incase
         if(!$request->hasFile('attachment')){
             return null;
         }

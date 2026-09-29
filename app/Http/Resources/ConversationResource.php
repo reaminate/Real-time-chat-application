@@ -15,6 +15,7 @@ class ConversationResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            'id' => $this->__get('id'),
             'type' => $this->__get('type'),
             'name' => $this->__get('name')??'direct_conversation',
             'last_message' => MessageResource::make($this->whenLoaded('lastMessage')),

@@ -322,7 +322,7 @@ Returns all conversations you belong to, each with its `last_message`. Not pagin
 
 `POST /conversation` 🔒
 
-You are automatically added to `users`. With exactly one other user the conversation is a **direct** conversation; with more it is a **group**. Only one direct conversation can exist between two users. Broadcasts [`GroupCreated`](#real-time-events).
+You are automatically added to `users`. With exactly one other user the conversation is a **direct** conversation; with more it is a **group**. Only one direct conversation can exist between two users. Prevents two users from creating the same conversation at the same time. Broadcasts [`GroupCreated`](#real-time-events).
 
 | Field   | Type         | Required                        | Rules                                                   |
 |---------|--------------|---------------------------------|---------------------------------------------------------|
@@ -343,7 +343,7 @@ You are automatically added to `users`. With exactly one other user the conversa
 
 `GET /conversation/{id}/messages` 🔒
 
-Returns the conversation with all its messages (newest first, each with its sender) and marks it as read for you.
+Returns the conversation with all its messages (newest first, each with its sender) and marks it as read for you. `image`/`file` messages include their attachments in `body`.
 
 | Query Param  | Type | Required | Description         |
 |--------------|------|----------|---------------------|
@@ -629,7 +629,7 @@ Use `multipart/form-data` when sending an attachment. Sending a message:
 
 | Status | When                                         |
 |--------|----------------------------------------------|
-| `201`  | Sent; returns the [Message object](#message) |
+| `201`  | Sent; returns the [Message object](#message). For `image`/`file` messages, `body` holds the stored attachment |
 | `401`  | Not logged in                                |
 | `403`  | You are not a member of the conversation     |
 | `422`  | Validation failed                            |
@@ -676,7 +676,7 @@ Text messages update their `body`; image/file messages replace their `attachment
 
 | Status | When                                            |
 |--------|-------------------------------------------------|
-| `200`  | Updated; returns the [Message object](#message) |
+| `200`  | Updated; returns the [Message object](#message). For `image`/`file` messages, `body` holds the new attachment |
 | `401`  | Not logged in                                   |
 | `403`  | You are not the sender                          |
 | `404`  | Message not found                               |
@@ -918,6 +918,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 
 ```json
 {
+  "id": 5,
   "name": "Jane Doe",
   "email": "jane@example.com",
   "friend_id": "jane-doe-1234",
@@ -928,6 +929,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 }
 ```
 
+- `id` — numeric user ID, used in request bodies such as `users` and `add_users` (URLs use `friend_id`)
 - `avatar` — *optional*, an [Attachment object](#attachment)
 - `last_seen_at` — *optional*, only shown when the user is offline
 - `conversations`, `created_conversations` — *optional*
@@ -936,6 +938,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 
 ```json
 {
+  "id": 7,
   "type": "group_convo",
   "name": "Friends",
   "last_message": {},
@@ -952,6 +955,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 
 ```json
 {
+  "id": 42,
   "conversation_id": 1,
   "conversation_more_information": {},
   "sender": {},
@@ -989,13 +993,14 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 ---
 
 ## Running the Backend
-
+- Run the docker with redis first.
+- open the port for it on windows defender
 ```sh
 php artisan migrate               # includes the notifications table
 php artisan storage:link          # serves avatars from /storage
-php artisan serve
+php artisan serve                 # serve normally. dont use --port
 php artisan queue:work            # broadcasts + notifications
 php artisan reverb:start --debug
 php artisan schedule:work
-ngrok http 8080
+ngrok http 8000
 ```

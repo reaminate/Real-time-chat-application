@@ -68,7 +68,7 @@ class ConversationController extends Controller
             $conversation->load('createdBy');
         }
         //load messages regardless
-        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user')]);
+        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user','attachments')]);
 
         $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update([
             'last_read_id' => $conversation->last_message_id,

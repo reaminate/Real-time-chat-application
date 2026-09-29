@@ -13,6 +13,7 @@ use App\Http\Requests\UpdateConversationRequest;
 use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -32,6 +33,19 @@ class ConversationService
         $validated['created_by'] = $creator->id;
         $users = $validated['users'];
         $validated['type'] = (count($users) === 2) ? ConversationTypeEnum::DIRECT->value : ConversationTypeEnum::GROUP->value;
+
+        if ($validated['type'] === ConversationTypeEnum::DIRECT->value) {
+            $ids = collect($users)->sort()->values(); //prevent two way
+            $key = 'creating_direct:'.$ids->implode(':');
+        } else {
+            $key = 'creating_group:'.$creator->id;
+        }
+        $lock = Cache::lock($key, 10);
+        if (!$lock->get()) {
+            throw ValidationException::withMessages([
+                'users' => 'already attempted to create a convo',
+            ]);
+        }
         if ($validated['type'] === ConversationTypeEnum::DIRECT->value) {
             $otherUserId = collect($users)->first(fn (int $id) => $id !== $creator->id);
             if ($this->checkIfTwoInDirect($creator, $otherUserId)) {
@@ -54,7 +68,7 @@ class ConversationService
             );
             return $conversation;
         });
-
+        $lock->release();
         broadcast(new GroupCreated($conversation));
 
         return $conversation;
@@ -79,6 +93,7 @@ class ConversationService
     {
         if (isset($validated['created_by'])) {
             DB::transaction(function () use ($request, $validated, $conversation) {
+                $conversation->lockForUpdate();
                 $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update(['role' => ConversationRoleEnum::MEMBER->value]);
                 $conversation->conversationMembers()->where('user_id', $validated['created_by'])->update(['role' => ConversationRoleEnum::OWNER->value]);
             });
