@@ -3,14 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MessageTypeEnum;
+use App\Events\MessageDeleted;
+use App\Events\MessageDeletedForever;
+use App\Events\MessageRead;
+use App\Events\MessageRestored;
 use App\Events\MessageSent;
+use App\Events\MessageUpdated;
 use App\Http\Resources\MessageResource;
 use App\Models\Message;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
 use App\Services\MessageService;
+use Illuminate\Broadcasting\PendingBroadcast;
 use Illuminate\Http\Request;
-
+use Illuminate\Broadcasting\BroadcastEvent;
 class MessageController extends Controller
 {
     /**
@@ -61,7 +67,12 @@ class MessageController extends Controller
         if($message->__get('type') != MessageTypeEnum::TEXT->value){
             $message->load('attachments');
         }
-
+        $user = $request->user();
+        $user->conversationMembers()->where('conversation_id', $message->conversation_id)
+        ->update([
+            'last_read_id' => $message->__get('id'),
+        ]);
+        broadcast(new MessageRead($message->conversation_id, $user, $message->id))->toOthers();
         return response()->json(MessageResource::make($message), 200);
     }
 
@@ -75,6 +86,7 @@ class MessageController extends Controller
         }
         $validated = $request->validated();
         $message = $service->update($validated, $request, $message);
+        broadcast(new MessageUpdated($message))->toOthers();
         return response()->json(MessageResource::make($message), 200);
     }
 
@@ -86,7 +98,11 @@ class MessageController extends Controller
         if($request->user()->cannot('delete', $message)){
             abort(403);
         }
+        $message_id = $message->__get('id');
         $message->delete();
+        if($message->trashed()){
+            broadcast(new MessageDeleted(Message::withTrashed()->find($message_id)))->toOthers();
+        }
         return response()->noContent();
     }
 
@@ -99,6 +115,7 @@ class MessageController extends Controller
             abort(403);
         }
         $message->forceDelete();
+        broadcast(new MessageDeletedForever($message))->toOthers();
         return response()->noContent();
     }
     /**
@@ -110,6 +127,7 @@ class MessageController extends Controller
             abort(403);
         }
         $message->restore();
+        broadcast(new MessageRestored($message));
         return response()->json(MessageResource::make($message), 201);
     }
     

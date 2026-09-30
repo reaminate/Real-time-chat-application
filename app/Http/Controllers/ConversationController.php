@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ConversationTypeEnum;
+use App\Events\MessageDelivered;
 use App\Events\UserAdded;
 use App\Events\UserDeleted;
+use App\Events\UserStoppedTyping;
 use App\Events\UserTyping;
 use App\Http\Requests\AddUsersRequest;
 use App\Http\Requests\DeleteUsersRequest;
@@ -69,14 +71,16 @@ class ConversationController extends Controller
         }
         //load messages regardless
         $conversation->load(['messages' => fn ($q) => $q->latest()->with('user','attachments')]);
-
-        $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update([
-            'last_read_id' => $conversation->last_message_id,
-        ]);
-
+        $member = $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->first();
+        $unreaMessages = $conversation->messages()
+            ->when($member->last_read_id, fn($q) => $q ->where('id', '>', $member->last_read_id))
+            ->where('id', '<=', $conversation->last_message_id)
+            ->where('sender_id', '!=', $request->user()->__get('id'))
+            ->pluck('id');
+        broadcast(new MessageDelivered($conversation->id, $request->user(), $unreaMessages))->toOthers();
         return response()->json(ConversationResource::make($conversation), 200);
     }
-
+    
     /**
      * Update the specified resource in storage.
      */
@@ -189,7 +193,17 @@ class ConversationController extends Controller
 
         return response()->noContent();
     }
+    public function userStoppedTyping(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        if($user->cannot('view', $conversation)){
+            abort(403);
+        }
+        Cache::forget("typing:{$conversation->id}:{$user->id}");
+        broadcast(new UserStoppedTyping($conversation->id, $user->id, $user->name))->toOthers();
 
+        return response()->noContent();
+    }
     public function pinMessage(PinMessageRequest $request, Conversation $conversation)
     {
         if($request->user()->cannot('pin', $conversation)){

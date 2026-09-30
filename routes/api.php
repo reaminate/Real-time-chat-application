@@ -17,7 +17,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/active-users', [UserController::class, 'currentlyActive']);
     Route::get('/notifications', [NotificationController::class, 'notifications']);
     Route::post('/notify/{user}/in/{conversation}', [NotificationController::class, 'notifyUser']);
-    Route::apiResource('/user', UserController::class)->except('store');
     Route::prefix('pin')->group(function(){
         Route::controller(ConversationController::class)->group(function(){
             Route::put('/{conversation}/add', 'pinMessage');
@@ -30,14 +29,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/message/{message}/force_delete', 'forceDelete')->withTrashed();
     });
     Route::controller(ConversationController::class)->group(function(){
-        Route::get('/conversation/{conversation}/messages', 'show');
-        Route::post('/conversation/{conversation}/users', 'addUsers');
-        Route::delete('/conversation/{conversation}/users', 'deleteUsers');
-        Route::post('/conversation/{conversation}/typing', 'userTyping');
-        Route::post('/conversation/{conversation}/restore', 'restore');
-        Route::delete('/conversation/{conversation}/force_delete', 'forceDelete');
+        Route::prefix('conversation/{conversation}')->group(function(){
+            Route::get('/messages', 'show');
+            Route::post('/users', 'addUsers');
+            Route::delete('/users', 'deleteUsers');
+            Route::post('/typing', 'userTyping');
+            Route::post('/stopped-typing', 'userStoppedTyping');
+            Route::post('/restore', 'restore')->withTrashed();
+            Route::delete('/force_delete', 'forceDelete')->withTrashed();
+        });
     });
-
+    Route::apiResource('/user', UserController::class)->except('store');
     Route::apiResource('/conversation', ConversationController::class)->except('show');
     Route::apiResource('/message', MessageController::class);
 });

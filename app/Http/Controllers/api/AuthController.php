@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\api;
 
 use App\Enums\AttachmentCollectionEnum;
+use App\Events\UserOffline;
+use App\Events\UserOnline;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginUserRequest;
 use App\Http\Requests\RegisterUserRequest;
@@ -29,7 +31,6 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
         $data = $service->register($validated, $request);
-
         return response([
             'message' => 'login successful',
             'user' => UserResource::make($data['user']),
@@ -46,6 +47,7 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
         $data = $service->login($validated, $request);
+        broadcast(new UserOnline($data['user']));       
         return response([
             'message' => 'login successful',
             'user' => UserResource::make($data['user']),
@@ -62,6 +64,7 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
         $request->user()->update(['last_seen_at'=>now()]);
+        broadcast(new UserOffline($request->user()));
         return response()->json([
             'message' => 'logout successful',
         ]);

@@ -147,7 +147,7 @@ class ConversationTest extends TestCase
 
     // show (messages)
 
-    public function test_messages_returns_conversation_messages_and_marks_them_read(): void
+    public function test_messages_returns_conversation_messages(): void
     {
         [$me, $other] = User::factory(2)->create();
         $conversation = $this->groupWith($me, $other);
@@ -160,7 +160,6 @@ class ConversationTest extends TestCase
             ->assertJsonCount(1, 'messages')
             ->assertJsonPath('messages.0.body', $message->body);
 
-        $this->assertSame($message->id, ConversationMember::where('user_id', $me->id)->sole()->last_read_id);
     }
 
     public function test_messages_forbids_non_member_with_403(): void

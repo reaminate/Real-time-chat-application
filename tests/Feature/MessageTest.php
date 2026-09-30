@@ -192,6 +192,18 @@ class MessageTest extends TestCase
             ->assertJsonPath('sender.email', $other->email);
     }
 
+    public function test_show_marks_message_read_for_viewer(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->getJson("/api/message/{$message->id}")->assertOk();
+
+        $this->assertSame($message->id, ConversationMember::where('user_id', $me->id)->sole()->last_read_id);
+        $this->assertNull(ConversationMember::where('user_id', $other->id)->sole()->last_read_id);
+    }
+
     public function test_show_returns_404_for_unknown_message(): void
     {
         Sanctum::actingAs(User::factory()->create());

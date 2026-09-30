@@ -1,6 +1,6 @@
 # RTC App — API Documentation
 
-A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, pinned messages, reply notifications, tagging users, typing indicators, and real-time broadcasting over private channels.
+A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, pinned messages, reply notifications, tagging users, typing indicators, delivered/read receipts, and real-time broadcasting over private channels.
 
 ## Table of Contents
 
@@ -93,7 +93,7 @@ Two endpoints return their own error bodies: [Update Conversation](#update-conve
 
 `POST /register`
 
-Creates a new user and returns an access token. Rate limited to 5 attempts per email + IP.
+Creates a new user and returns an access token. Rate limited to 5 attempts per email + IP. Broadcasts [`user.online`](#real-time-events).
 
 | Field      | Type   | Required | Rules                                                                           |
 |------------|--------|----------|---------------------------------------------------------------------------------|
@@ -124,7 +124,7 @@ Creates a new user and returns an access token. Rate limited to 5 attempts per e
 
 `POST /login`
 
-Rate limited to 5 attempts per email + IP. Clears the user's `last_seen_at` (marks them online).
+Rate limited to 5 attempts per email + IP. Clears the user's `last_seen_at` (marks them online) and broadcasts [`user.online`](#real-time-events) to their conversations.
 
 | Field      | Type   | Required | Rules                           |
 |------------|--------|----------|---------------------------------|
@@ -153,7 +153,7 @@ Rate limited to 5 attempts per email + IP. Clears the user's `last_seen_at` (mar
 
 `GET /logout` 🔒
 
-Revokes the current token and sets the user's `last_seen_at`.
+Revokes the current token, sets the user's `last_seen_at` and broadcasts [`user.offline`](#real-time-events) to their conversations.
 
 **Responses**
 
@@ -343,7 +343,9 @@ You are automatically added to `users`. With exactly one other user the conversa
 
 `GET /conversation/{id}/messages` 🔒
 
-Returns the conversation with all its messages (newest first, each with its sender) and marks it as read for you. `image`/`file` messages include their attachments in `body`.
+Returns the conversation with all its messages (newest first, each with its sender). `image`/`file` messages include their attachments in `body`.
+
+Opening a conversation marks its new messages as **delivered**: it broadcasts [`MessageDelivered`](#real-time-events) to the other members with the IDs of the messages sent by others since your last read message. Messages are marked as **read** one at a time, when you open each one with [Get Message](#get-message).
 
 | Query Param  | Type | Required | Description         |
 |--------------|------|----------|---------------------|
@@ -514,6 +516,20 @@ Broadcasts a `user.typing` event to other members. Throttled to once every 3 sec
 | `403`  | You are not an active member |
 | `404`  | Conversation not found       |
 
+
+`POST /conversation/{id}/stopped-typing` 🔒
+
+Broadcasts a `user.stopped.typing` event to other members. Throttled to once every 3 seconds per user per conversation (extra calls still return `204` but don't broadcast). No body. If a user is typing event exists, it will delete it.
+
+**Responses**
+
+| Status | When                         |
+|--------|------------------------------|
+| `204`  | OK                           |
+| `401`  | Not logged in                |
+| `403`  | You are not an active member |
+| `404`  | Conversation not found       |
+
 ---
 
 ### Pin Message
@@ -564,7 +580,7 @@ Unpins a message in the conversation `{id}`.
 
 `GET /pin/{id}/pinned` 🔒
 
-Returns the conversation with only its pinned messages (newest first, each with its sender). Unlike [Get Conversation with Messages](#get-conversation-with-messages), this doesn't mark the conversation as read.
+Returns the conversation with only its pinned messages (newest first, each with its sender). Unlike [Get Conversation with Messages](#get-conversation-with-messages), this doesn't broadcast `MessageDelivered`.
 
 **Responses**
 
@@ -643,6 +659,8 @@ Use `multipart/form-data` when sending an attachment. Sending a message:
 
 Always includes the sender (with avatar). Attachments are included for `image`/`file` messages.
 
+Marks the message as **read** for you (sets it as your last read message in the conversation) and broadcasts [`MessageRead`](#real-time-events) to the other members. Call this for each message as the user reads it.
+
 | Query Param                | Type | Required | Description                                           |
 |----------------------------|------|----------|-------------------------------------------------------|
 | `conversation_information` | flag | No       | Include the conversation (only shown to admins/owner) |
@@ -664,7 +682,7 @@ Always includes the sender (with avatar). Attachments are included for `image`/`
 
 `PUT /message/{id}` / `PATCH /message/{id}` 🔒
 
-Text messages update their `body`; image/file messages replace their `attachment`.
+Text messages update their `body`; image/file messages replace their `attachment`. Broadcasts [`MessageUpdated`](#real-time-events) to the conversation.
 
 | Field             | Type   | Required | Rules                                  |
 |-------------------|--------|----------|----------------------------------------|
@@ -688,7 +706,7 @@ Text messages update their `body`; image/file messages replace their `attachment
 
 `DELETE /message/{id}` 🔒
 
-Soft-deletes the message.
+Soft-deletes the message and broadcasts [`MessageDeleted`](#real-time-events) to the conversation.
 
 **Responses**
 
@@ -705,7 +723,7 @@ Soft-deletes the message.
 
 `GET /message/{id}/restore` 🔒
 
-Restores a soft-deleted message.
+Restores a soft-deleted message and broadcasts [`MessageRestored`](#real-time-events) to the conversation.
 
 **Responses**
 
@@ -722,7 +740,7 @@ Restores a soft-deleted message.
 
 `DELETE /message/{id}/force_delete` 🔒
 
-Works on both normal and soft-deleted messages.
+Works on both normal and soft-deleted messages. Broadcasts [`MessageDeletedForever`](#real-time-events) to the conversation.
 
 **Responses**
 
@@ -890,11 +908,33 @@ Events are broadcast on private channels. Authenticate channels with a bearer to
 |----------------|---------------------------------------------------|---------------------------|------------------------------------|
 | `GroupCreated` | `user.{id}` for every member                      | Creating a conversation   | `conversation`                     |
 | `MessageSent`  | `conversation.{id}`                               | Sending a message         | `message`                          |
+| `MessageDelivered` | `conversation.{id}`                           | [Opening a conversation](#get-conversation-with-messages) | `conversationId`, `user`, `messageIds` |
+| `MessageRead`  | `conversation.{id}`                               | [Getting a message](#get-message) | `conversationId`, `user`, `messageId` |
 | `UserAdded`    | `conversation.{id}` + `user.{id}` of each added   | Adding or restoring users | `conversation`, `userIds`          |
 | `UserDeleted`  | `conversation.{id}` + `user.{id}` of each removed | Removing users            | `conversationId`, `userIds`        |
-| `user.typing`  | `conversation.{id}`                               | Typing indicator endpoint | `conversationId`, `userId`, `name` |
+| `MessageUpdated` | `conversation.{id}`                             | [Updating a message](#update-message) | `message`              |
+| `MessageDeleted` | `conversation.{id}`                             | [Deleting a message](#delete-message) (soft delete) | `message` (includes `deleted_at`) |
+| `MessageRestored` | `conversation.{id}`                            | [Restoring a message](#restore-message) | `message`             |
+| `MessageDeletedForever` | `conversation.{id}`                      | [Permanently deleting a message](#permanently-delete-message) | `message` |
+| `user.typing`  | `conversation.{id}`                               | [Typing indicator](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
+| `user.stopped.typing` | `conversation.{id}`                        | [Stopped typing](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
+| `user.online`  | `conversation.{id}` for every conversation the user belongs to | [Registering](#register) or [logging in](#login) | `user_id`, `name`, `friend_id` |
+| `user.offline` | `conversation.{id}` for every conversation the user belongs to | [Logging out](#logout) | `user_id`, `name`, `friend_id`, `last_seen_at` |
 
-Events are sent to everyone **except** the user who triggered them, except `GroupCreated`, which goes to all members.
+Events are sent to everyone **except** the user who triggered them. The exceptions are `GroupCreated`, `MessageRestored`, `user.online` and `user.offline`, which go to all members.
+
+Events with a dotted name (`user.typing`, `user.stopped.typing`, `user.online`, `user.offline`) are custom names, so listen for them with a leading dot, e.g. `.listen('.user.online', ...)`. The others use their class name, e.g. `.listen('MessageUpdated', ...)`.
+
+**Delivered and read receipts**
+
+1. When a user opens a conversation, the other members receive `MessageDelivered`. `messageIds` lists the messages (sent by others) that have just been delivered to `user`.
+2. As the user reads each message, the client calls [`GET /message/{id}`](#get-message), which marks it as read and sends `MessageRead` with that `messageId`. Since read is tracked as the last read message, every earlier message in the conversation can be shown as read too.
+
+```js
+Echo.private(`conversation.${conversationId}`)
+    .listen('MessageDelivered', (e) => { /* e.user, e.messageIds */ })
+    .listen('MessageRead', (e) => { /* e.user, e.messageId */ });
+```
 
 ---
 
@@ -1002,5 +1042,5 @@ php artisan serve                 # serve normally. dont use --port
 php artisan queue:work            # broadcasts + notifications
 php artisan reverb:start --debug
 php artisan schedule:work
-ngrok http 8000
+ngrok start --all
 ```
