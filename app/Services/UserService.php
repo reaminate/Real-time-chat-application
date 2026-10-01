@@ -19,8 +19,8 @@ class UserService
      */
     public function update(array $validated, UpdateUserRequest $request, User $user): User
     {
-        DB::transaction(function() use($validated, $request, $user){
-            $user->lockForUpdate();
+        return DB::transaction(function() use($validated, $request, $user){
+            $user = User::whereKey($user->__get('id'))->lockForUpdate()->firstOrFail();
             if(isset($validated['avatar'])){
                 $this->storeAvatarFor($request, $user);
                 unset($validated['avatar']);
@@ -30,9 +30,9 @@ class UserService
                 unset($validated['new_password']);
             }
             $user->update($validated);
+
+            return $user;
         });
-        
-        return $user;
     }
 
     /**
@@ -43,18 +43,24 @@ class UserService
      */
     protected function storeAvatarFor(UpdateUserRequest $request, User $user): void
     {
-        $oldPath = $user->avatar()->pluck('path')->all();
-
+        $oldPaths = $user->avatar()->pluck('path')->all();
         $file = $request->file('avatar');
         $path = $file->store('avatars', 'public');
-        $user->avatar()->updateOrCreate([], [
-            'collection' => AttachmentCollectionEnum::AVATAR,
-            'original_name' => $file->getClientOriginalName(),
-            'file_name' => basename($path),
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
-            'path' => $path,
-        ]);
-        Storage::disk('public')->delete($oldPath);
+
+        try {
+            $user->avatar()->updateOrCreate([], [
+                'collection' => AttachmentCollectionEnum::AVATAR,
+                'original_name' => $file->getClientOriginalName(),
+                'file_name' => basename($path),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'path' => $path,
+            ]);
+        } catch (\Throwable $e) {
+            Storage::disk('public')->delete($path);
+            throw $e;
+        }
+
+        DB::afterCommit(fn () => Storage::disk('public')->delete($oldPaths));
     }
 }

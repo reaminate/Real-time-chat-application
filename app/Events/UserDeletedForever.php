@@ -9,16 +9,12 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-
-// for user model deletion
+//for user model deletion
 class UserDeletedForever implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     /**
-     * Conversation ids captured at construction, because deleting the user
-     * nulls their membership rows before the channels are resolved.
-     *
      * @var array<int, int>
      */
     public array $conversationIds;
