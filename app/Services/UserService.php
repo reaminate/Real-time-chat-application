@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 class UserService
 {
@@ -42,9 +43,10 @@ class UserService
      */
     protected function storeAvatarFor(UpdateUserRequest $request, User $user): void
     {
+        $oldPath = $user->avatar()->pluck('path')->all();
+
         $file = $request->file('avatar');
         $path = $file->store('avatars', 'public');
-
         $user->avatar()->updateOrCreate([], [
             'collection' => AttachmentCollectionEnum::AVATAR,
             'original_name' => $file->getClientOriginalName(),
@@ -53,5 +55,6 @@ class UserService
             'size' => $file->getSize(),
             'path' => $path,
         ]);
+        Storage::disk('public')->delete($oldPath);
     }
 }

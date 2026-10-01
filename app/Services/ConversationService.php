@@ -13,6 +13,7 @@ use App\Http\Requests\UpdateConversationRequest;
 use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,13 +36,13 @@ class ConversationService
         $validated['type'] = (count($users) === 2) ? ConversationTypeEnum::DIRECT->value : ConversationTypeEnum::GROUP->value;
 
         if ($validated['type'] === ConversationTypeEnum::DIRECT->value) {
-            $ids = collect($users)->sort()->values(); //prevent two way
+            $ids = collect($users)->sort()->values(); // prevent two way
             $key = 'creating_direct:'.$ids->implode(':');
         } else {
             $key = 'creating_group:'.$creator->id;
         }
         $lock = Cache::lock($key, 10);
-        if (!$lock->get()) {
+        if (! $lock->get()) {
             throw ValidationException::withMessages([
                 'users' => 'already attempted to create a convo',
             ]);
@@ -66,6 +67,7 @@ class ConversationService
                     'joined_at' => now(),
                 ]])->all()
             );
+
             return $conversation;
         });
         $lock->release();
@@ -86,6 +88,7 @@ class ConversationService
             })
             ->exists();
     }
+
     /**
      * updates a conversation, optionally transferring ownership and/or promoting members to admin
      */
@@ -180,5 +183,25 @@ class ConversationService
             ->update(['left_at' => null]);
 
         return User::whereIn('id', $users)->get();
+    }
+
+    public function show(Request $request, Conversation $conversation, User $user): array
+    {
+        if ($request->has('created_by')) {
+            $conversation->load('createdBy');
+        }
+        // load messages regardless
+        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user', 'attachments')]);
+        $member = $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->first();
+        $unreaMessages = $conversation->messages()
+            ->when($member->last_read_id, fn ($q) => $q->where('id', '>', $member->last_read_id))
+            ->when($conversation->last_message_id, fn ($q) => $q->where('id', '<=', $conversation->last_message_id))
+            ->where('sender_id', '!=', $request->user()->__get('id'))
+            ->pluck('id');
+        $data = [];
+        $data['conversation'] = $conversation;
+        $data['unread_messages'] = $unreaMessages;
+
+        return $data;
     }
 }

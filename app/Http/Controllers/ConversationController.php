@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ConversationTypeEnum;
+use App\Events\ConversationDeleted;
+use App\Events\ConversationUpdated;
 use App\Events\MessageDelivered;
 use App\Events\UserAdded;
 use App\Events\UserDeleted;
@@ -15,11 +16,9 @@ use App\Http\Requests\PinMessageRequest;
 use App\Http\Requests\RemovePinRequest;
 use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\UpdateConversationRequest;
-use App\Http\Requests\UserSearchRequest;
 use App\Http\Resources\ConversationResource;
 use App\Http\Resources\UserResource;
 use App\Models\Conversation;
-use App\Models\User;
 use App\Services\ConversationService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -61,26 +60,20 @@ class ConversationController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, Conversation $conversation)
+    public function show(Request $request, Conversation $conversation, ConversationService $service)
     {
         if ($request->user()->cannot('view', $conversation)) {
             abort(403);
         }
-        if ($request->has('created_by')) {
-            $conversation->load('createdBy');
-        }
-        //load messages regardless
-        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user','attachments')]);
-        $member = $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->first();
-        $unreaMessages = $conversation->messages()
-            ->when($member->last_read_id, fn($q) => $q ->where('id', '>', $member->last_read_id))
-            ->where('id', '<=', $conversation->last_message_id)
-            ->where('sender_id', '!=', $request->user()->__get('id'))
-            ->pluck('id');
-        broadcast(new MessageDelivered($conversation->id, $request->user(), $unreaMessages))->toOthers();
+        $user = $request->user();
+        $data = $service->show($request, $conversation, $user);
+        $conversation = $data['conversation'];
+        $unreadMessages = $data['unread_messages'];
+        broadcast(new MessageDelivered($conversation->id, $request->user(), $unreadMessages))->toOthers();
+
         return response()->json(ConversationResource::make($conversation), 200);
     }
-    
+
     /**
      * Update the specified resource in storage.
      */
@@ -97,6 +90,7 @@ class ConversationController extends Controller
         } catch (QueryException $e) {
             return response()->json(['error' => 'Database update failed.'], 500);
         }
+        broadcast(new ConversationUpdated($conversation));
 
         return response()->json(ConversationResource::make($conversation), 200);
     }
@@ -118,6 +112,7 @@ class ConversationController extends Controller
         if ($request->user()->cannot('manageUsers', $conversation)) {
             abort(403);
         }
+        $event = new ConversationDeleted($conversation);
         try {
             $conversation = $service->deleteUsers($request, $conversation);
         } catch (QueryException $e) {
@@ -126,9 +121,12 @@ class ConversationController extends Controller
         broadcast(new UserDeleted($conversation->id, $request->validated('delete_users')))->toOthers();
 
         if (! $conversation->exists) {
+            broadcast($event);
+
             return response()->noContent();
         }
         $conversation->load('users');
+
         return response()->json(ConversationResource::make($conversation), 200);
     }
 
@@ -140,7 +138,9 @@ class ConversationController extends Controller
         if ($request->user()->cannot('delete', $conversation)) {
             abort(403);
         }
+        $event = new ConversationDeleted($conversation);
         $conversation->delete();
+        broadcast($event);
 
         return response()->noContent();
     }
@@ -193,10 +193,11 @@ class ConversationController extends Controller
 
         return response()->noContent();
     }
+
     public function userStoppedTyping(Request $request, Conversation $conversation)
     {
         $user = $request->user();
-        if($user->cannot('view', $conversation)){
+        if ($user->cannot('view', $conversation)) {
             abort(403);
         }
         Cache::forget("typing:{$conversation->id}:{$user->id}");
@@ -204,29 +205,32 @@ class ConversationController extends Controller
 
         return response()->noContent();
     }
+
     public function pinMessage(PinMessageRequest $request, Conversation $conversation)
     {
-        if($request->user()->cannot('pin', $conversation)){
+        if ($request->user()->cannot('pin', $conversation)) {
             abort(403);
         }
         $validated = $request->validated();
         $conversation->messages()->whereKey($validated['pin_message'])->update(['is_pinned' => true]);
+
         return response()->json(ConversationResource::make($conversation), 200);
     }
-    
+
     public function removePinMessage(RemovePinRequest $request, Conversation $conversation)
     {
-        if($request->user()->cannot('pin', $conversation)){
+        if ($request->user()->cannot('pin', $conversation)) {
             abort(403);
         }
         $validated = $request->validated();
         $conversation->messages()->whereKey($validated['remove_pin_message'])->update(['is_pinned' => false]);
+
         return response()->json(ConversationResource::make($conversation), 200);
     }
 
     public function viewPinnedOnly(Request $request, Conversation $conversation)
     {
-        if($request->user()->cannot('view', $conversation)){
+        if ($request->user()->cannot('view', $conversation)) {
             abort(403);
         }
         $conversation->load(['messages' => fn ($q) => $q->latest()->where('is_pinned', true)->with('user')]);

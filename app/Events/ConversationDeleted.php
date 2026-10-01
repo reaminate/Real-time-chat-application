@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-use App\Models\Message;
+use App\Models\Conversation;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -10,16 +10,18 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class MessageDeletedForever implements ShouldBroadcastNow
+class ConversationDeleted implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     /**
-     * Create a new event instance.
+     * @var array<int, int>
      */
-    public function __construct(public Message $message)
+    public array $userIds;
+
+    public function __construct(public Conversation $conversation)
     {
-        //
+        $this->userIds = $conversation->users()->pluck('users.id')->all();
     }
 
     /**
@@ -29,8 +31,6 @@ class MessageDeletedForever implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [
-            new PrivateChannel('conversation.'.$this->message->conversation_id),
-        ];
+        return array_map(fn (int $id) => new PrivateChannel('user.'.$id), $this->userIds);
     }
 }

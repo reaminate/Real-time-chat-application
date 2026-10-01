@@ -232,7 +232,7 @@ Returns the user along with the conversations you share with them.
 
 `PUT /user/{friend_id}` / `PATCH /user/{friend_id}` 🔒
 
-You can only update yourself. All fields are optional, but changing your password requires your current `password`.
+You can only update yourself. All fields are optional, but changing your password requires your current `password`. Broadcasts [`UserUpdatedInfo`](#real-time-events) to your conversations.
 
 | Field          | Type   | Required                        | Rules                                                 |
 |----------------|--------|---------------------------------|-------------------------------------------------------|
@@ -258,7 +258,7 @@ You can only update yourself. All fields are optional, but changing your passwor
 
 `DELETE /user/{friend_id}` 🔒
 
-You can only delete yourself.
+You can only delete yourself. Broadcasts [`UserDeletedForever`](#real-time-events) to every conversation you were in.
 
 **Responses**
 
@@ -368,7 +368,7 @@ Flags only need to be present, e.g. `?created_by`.
 
 `PUT /conversation/{id}` / `PATCH /conversation/{id}` 🔒
 
-All fields are optional.
+All fields are optional. Broadcasts [`ConversationUpdated`](#real-time-events) to every member.
 
 | Field              | Type         | Required | Rules                                                                       |
 |--------------------|--------------|----------|-----------------------------------------------------------------------------|
@@ -392,6 +392,8 @@ All fields are optional.
 ### Delete Conversation
 
 `DELETE /conversation/{id}` 🔒
+
+Broadcasts [`ConversationDeleted`](#real-time-events) to every member.
 
 **Responses**
 
@@ -430,7 +432,7 @@ Adds users as `member`s. A direct conversation is turned into a group named `New
 
 `DELETE /conversation/{id}/users` 🔒
 
-Marks users as having left. If 1 or fewer members remain the conversation is deleted; if exactly 2 remain it becomes a direct conversation. Broadcasts [`UserDeleted`](#real-time-events).
+Marks users as having left. If 1 or fewer members remain the conversation is deleted; if exactly 2 remain it becomes a direct conversation. Broadcasts [`UserDeleted`](#real-time-events), and also [`ConversationDeleted`](#real-time-events) if the conversation was deleted.
 
 | Field          | Type         | Required | Rules                                               |
 |----------------|--------------|----------|-----------------------------------------------------|
@@ -918,10 +920,16 @@ Events are broadcast on private channels. Authenticate channels with a bearer to
 | `MessageDeletedForever` | `conversation.{id}`                      | [Permanently deleting a message](#permanently-delete-message) | `message` |
 | `user.typing`  | `conversation.{id}`                               | [Typing indicator](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
 | `user.stopped.typing` | `conversation.{id}`                        | [Stopped typing](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
-| `user.online`  | `conversation.{id}` for every conversation the user belongs to | [Registering](#register) or [logging in](#login) | `user_id`, `name`, `friend_id` |
+| `user.online`  | `conversation.{id}` for every conversation the user belongs to | [logging in](#login) | `user_id`, `name`, `friend_id` |
 | `user.offline` | `conversation.{id}` for every conversation the user belongs to | [Logging out](#logout) | `user_id`, `name`, `friend_id`, `last_seen_at` |
+| `ConversationUpdated` | `user.{id}` for every member               | [Updating a conversation](#update-conversation) | `conversation` |
+| `ConversationDeleted` | `user.{id}` for every member at the time of deletion | [Deleting a conversation](#delete-conversation), or [removing users](#remove-users) until 1 or fewer remain | `conversation`, `userIds` |
+| `UserUpdatedInfo` | `conversation.{id}` for every conversation the user belongs to | [Updating a user](#update-user) | `user` |
+| `UserDeletedForever` | `conversation.{id}` for every conversation the user belonged to | [Deleting a user](#delete-user) | `user`, `conversationIds` |
 
-Events are sent to everyone **except** the user who triggered them. The exceptions are `GroupCreated`, `MessageRestored`, `user.online` and `user.offline`, which go to all members.
+Events are sent to everyone **except** the user who triggered them. The exceptions are `GroupCreated`, `MessageRestored`, `ConversationUpdated`, `ConversationDeleted`, `user.online` and `user.offline`, which go to all members.
+
+When a conversation is deleted by removing users, `ConversationDeleted` also reaches the users who were just removed (they receive `UserDeleted` as well).
 
 Events with a dotted name (`user.typing`, `user.stopped.typing`, `user.online`, `user.offline`) are custom names, so listen for them with a leading dot, e.g. `.listen('.user.online', ...)`. The others use their class name, e.g. `.listen('MessageUpdated', ...)`.
 

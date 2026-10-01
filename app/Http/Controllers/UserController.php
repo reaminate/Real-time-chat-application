@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\UserDeletedForever;
+use App\Events\UserUpdatedInfo;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\UserSearchRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\UserService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
@@ -18,7 +21,7 @@ class UserController extends Controller
      */
     public function index(UserSearchRequest $request)
     {
-        if($request->user()->cannot('viewAny', User::class)){
+        if ($request->user()->cannot('viewAny', User::class)) {
             abort(403);
         }
         $string_of_letters = $request->validated('search');
@@ -42,14 +45,14 @@ class UserController extends Controller
      */
     public function show(Request $request, User $user)
     {
-        if($request->user()->cannot('view', $user)){
+        if ($request->user()->cannot('view', $user)) {
             abort(403);
         }
 
         $authId = $request->user()->__get('id');
 
-        $user->load(['conversations' => function($query) use($authId){
-            $query->whereHas('users', fn($query) => $query->where('users.id', $authId));
+        $user->load(['conversations' => function ($query) use ($authId) {
+            $query->whereHas('users', fn ($query) => $query->where('users.id', $authId));
         }])->cursorPaginate(20);
 
         return response()->json(UserResource::make($user), 200);
@@ -60,14 +63,16 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user, UserService $service)
     {
-        if($request->user()->cannot('update', $user)){
+        if ($request->user()->cannot('update', $user)) {
             abort(403);
         }
         $validated = $request->validated();
-        if(isset($validated['new_password']) && !Hash::check($validated['password'], $user->password)){
+        if (isset($validated['new_password']) && ! Hash::check($validated['password'], $user->password)) {
             return response('', 422);
         }
-        $service->update($validated, $request, $user);
+        $user = $service->update($validated, $request, $user);
+        broadcast(new UserUpdatedInfo($user));
+
         return response()->json(UserResource::make($user), 200);
     }
 
@@ -76,20 +81,25 @@ class UserController extends Controller
      */
     public function destroy(User $user, Request $request)
     {
-        if($request->user()->cannot('delete', $user)){
+        if ($request->user()->cannot('delete', $user)) {
             abort(403);
         }
+        $event = new UserDeletedForever($user);
         $user->delete();
+        broadcast($event)->toOthers();
+
         return response()->noContent();
     }
+
     /**
      * returns the currently active users
-     * @return \Illuminate\Http\JsonResponse
+     *
+     * @return JsonResponse
      */
     public function currentlyActive(Request $request)
     {
         $user = $request->user();
-        $users = Cache::remember('active_users', 60, function(){
+        $users = Cache::remember('active_users', 60, function () {
             return User::where('last_seen_at', null)->get();
         });
 

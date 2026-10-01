@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\AttachmentCollectionEnum;
-use App\Enums\MessageTypeEnum;
 use App\Models\Attachment;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
@@ -167,6 +166,53 @@ class MessageTest extends TestCase
             ->assertJsonValidationErrors('attachment');
     }
 
+    public static function invalidAttachments(): array
+    {
+        return [
+            'pdf sent as image' => ['image', 'doc.pdf', 10, 'application/pdf'],
+            'png sent as file' => ['file', 'pic.png', 10, 'image/png'],
+            'executable' => ['file', 'virus.exe', 10, 'application/x-msdownload'],
+            'oversized image' => ['image', 'big.png', 10241, 'image/png'],
+            'attachment on text message' => ['text', 'pic.png', 10, 'image/png'],
+        ];
+    }
+
+    #[DataProvider('invalidAttachments')]
+    public function test_store_rejects_invalid_attachment_with_422(string $type, string $name, int $kilobytes, string $mime): void
+    {
+        $me = User::factory()->create();
+        $conversation = $this->groupWith($me, User::factory()->create());
+        Storage::fake('local');
+        Sanctum::actingAs($me);
+
+        $this->post('/api/message', [
+            'conversation_id' => $conversation->id,
+            'type' => $type,
+            'body' => 'hi',
+            'attachment' => UploadedFile::fake()->create($name, $kilobytes, $mime),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attachment');
+
+        $this->assertDatabaseCount('messages', 0);
+    }
+
+    public function test_store_saves_real_mime_type(): void
+    {
+        $me = User::factory()->create();
+        $conversation = $this->groupWith($me, User::factory()->create());
+        Storage::fake('local');
+        Sanctum::actingAs($me);
+
+        $this->post('/api/message', [
+            'conversation_id' => $conversation->id,
+            'type' => 'file',
+            'attachment' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $this->assertSame('application/pdf', Attachment::sole()->mime_type);
+    }
+
     public function test_store_forbids_non_member_with_403(): void
     {
         $conversation = $this->groupWith(User::factory()->create());
@@ -244,6 +290,63 @@ class MessageTest extends TestCase
         $attachment = $message->attachments()->sole();
         $this->assertSame('new.pdf', $attachment->original_name);
         Storage::disk('local')->assertExists($attachment->path);
+    }
+
+    public function test_update_deletes_replaced_file_from_disk(): void
+    {
+        $me = User::factory()->create();
+        $conversation = $this->groupWith($me, User::factory()->create());
+        $message = Message::factory()->file()->create(['sender_id' => $me->id, 'conversation_id' => $conversation->id]);
+        Storage::fake('local');
+        Storage::disk('local')->put('attachments/old.pdf', 'old contents');
+        Attachment::factory()->document()->create(['attachable_id' => $message->id, 'path' => 'attachments/old.pdf']);
+        Sanctum::actingAs($me);
+
+        $this->patch("/api/message/{$message->id}", [
+            'conversation_id' => $conversation->id,
+            'attachment' => UploadedFile::fake()->create('new.pdf', 10, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        Storage::disk('local')->assertMissing('attachments/old.pdf');
+        $attachment = $message->attachments()->sole();
+        Storage::disk('local')->assertExists($attachment->path);
+        $this->assertSame(basename($attachment->path), $attachment->file_name);
+    }
+
+    public function test_update_rejects_attachment_not_matching_message_type(): void
+    {
+        $me = User::factory()->create();
+        $conversation = $this->groupWith($me, User::factory()->create());
+        $message = Message::factory()->file()->create(['sender_id' => $me->id, 'conversation_id' => $conversation->id]);
+        $original = Attachment::factory()->document()->create(['attachable_id' => $message->id]);
+        Storage::fake('local');
+        Sanctum::actingAs($me);
+
+        $this->patch("/api/message/{$message->id}", [
+            'conversation_id' => $conversation->id,
+            'attachment' => UploadedFile::fake()->create('pic.png', 10, 'image/png'),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attachment');
+
+        $this->assertSame($original->path, $message->attachments()->sole()->path);
+    }
+
+    public function test_update_rejects_oversized_attachment(): void
+    {
+        $me = User::factory()->create();
+        $conversation = $this->groupWith($me, User::factory()->create());
+        $message = Message::factory()->file()->create(['sender_id' => $me->id, 'conversation_id' => $conversation->id]);
+        Attachment::factory()->document()->create(['attachable_id' => $message->id]);
+        Storage::fake('local');
+        Sanctum::actingAs($me);
+
+        $this->patch("/api/message/{$message->id}", [
+            'conversation_id' => $conversation->id,
+            'attachment' => UploadedFile::fake()->create('big.pdf', 10241, 'application/pdf'),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attachment');
     }
 
     public function test_update_rejects_missing_conversation_id_with_422(): void

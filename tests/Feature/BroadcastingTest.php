@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Events\ConversationDeleted;
+use App\Events\ConversationUpdated;
 use App\Events\GroupCreated;
 use App\Events\MessageDeleted;
 use App\Events\MessageDeletedForever;
@@ -12,9 +14,11 @@ use App\Events\MessageSent;
 use App\Events\MessageUpdated;
 use App\Events\UserAdded;
 use App\Events\UserDeleted;
+use App\Events\UserDeletedForever;
 use App\Events\UserOffline;
 use App\Events\UserOnline;
 use App\Events\UserStoppedTyping;
+use App\Events\UserUpdatedInfo;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
 use App\Models\Message;
@@ -258,6 +262,88 @@ class BroadcastingTest extends TestCase
         Event::assertDispatched(UserOffline::class, fn (UserOffline $e) => $this->channelNames($e->broadcastOn()) === ['private-conversation.'.$conversation->id]
             && $e->broadcastAs() === 'user.offline'
             && $e->broadcastWith()['last_seen_at'] !== null);
+    }
+
+    public function test_user_updated_info_broadcasts_on_users_conversation_channels(): void
+    {
+        Event::fake([UserUpdatedInfo::class]);
+        [$a, $b, $c] = User::factory(3)->create();
+        $first = $this->groupWith($a, $b);
+        $second = $this->groupWith($c, $a);
+        $this->groupWith($b, $c);
+        Sanctum::actingAs($a);
+
+        $this->patchJson("/api/user/{$a->friend_id}", ['name' => 'Renamed'])->assertOk();
+
+        Event::assertDispatched(UserUpdatedInfo::class, fn (UserUpdatedInfo $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn())
+                === collect([$first, $second])->map(fn ($c) => 'private-conversation.'.$c->id)->sort()->values()->all()
+            && $e->user->is($a)
+            && $e->user->name === 'Renamed');
+    }
+
+    public function test_user_deleted_forever_broadcasts_on_users_conversation_channels(): void
+    {
+        Event::fake([UserDeletedForever::class]);
+        [$a, $b, $c] = User::factory(3)->create();
+        $first = $this->groupWith($a, $b);
+        $second = $this->groupWith($c, $a);
+        $this->groupWith($b, $c);
+        Sanctum::actingAs($a);
+
+        $this->deleteJson("/api/user/{$a->friend_id}")->assertNoContent();
+
+        Event::assertDispatched(UserDeletedForever::class, fn (UserDeletedForever $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn())
+                === collect([$first, $second])->map(fn ($c) => 'private-conversation.'.$c->id)->sort()->values()->all()
+            && $e->user->id === $a->id);
+    }
+
+    public function test_conversation_updated_broadcasts_on_members_user_channels(): void
+    {
+        Event::fake([ConversationUpdated::class]);
+        [$a, $b, $c] = User::factory(3)->create();
+        $conversation = $this->groupWith($a, $b, $c);
+        Sanctum::actingAs($a);
+
+        $this->patchJson("/api/conversation/{$conversation->id}", ['name' => 'Renamed'])->assertOk();
+
+        Event::assertDispatched(ConversationUpdated::class, fn (ConversationUpdated $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn())
+                === collect([$a, $b, $c])->map(fn ($u) => 'private-user.'.$u->id)->sort()->values()->all()
+            && $e->conversation->is($conversation)
+            && $e->conversation->name === 'Renamed');
+    }
+
+    public function test_conversation_deleted_broadcasts_on_members_user_channels(): void
+    {
+        Event::fake([ConversationDeleted::class]);
+        [$a, $b, $c] = User::factory(3)->create();
+        $conversation = $this->groupWith($a, $b, $c);
+        Sanctum::actingAs($a);
+
+        $this->deleteJson("/api/conversation/{$conversation->id}")->assertNoContent();
+
+        Event::assertDispatched(ConversationDeleted::class, fn (ConversationDeleted $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn())
+                === collect([$a, $b, $c])->map(fn ($u) => 'private-user.'.$u->id)->sort()->values()->all()
+            && $e->conversation->id === $conversation->id);
+    }
+
+    public function test_removing_users_until_one_remains_broadcasts_conversation_deleted(): void
+    {
+        Event::fake([ConversationDeleted::class]);
+        [$a, $b] = User::factory(2)->create();
+        $conversation = $this->groupWith($a, $b);
+        Sanctum::actingAs($a);
+
+        $this->deleteJson("/api/conversation/{$conversation->id}/users", ['delete_users' => [$b->id]])
+            ->assertNoContent();
+
+        $this->assertModelMissing($conversation);
+        Event::assertDispatched(ConversationDeleted::class, fn (ConversationDeleted $e) => $this->channelNames($e->broadcastOn())
+            === collect([$a, $b])->map(fn ($u) => 'private-user.'.$u->id)->sort()->values()->all()
+            && $e->conversation->id === $conversation->id);
     }
 
     public function test_channel_authorization(): void

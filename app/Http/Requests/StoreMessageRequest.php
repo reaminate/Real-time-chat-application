@@ -31,8 +31,9 @@ class StoreMessageRequest extends FormRequest
                 fn ($query) => $query->where('conversation_id', $this->input('conversation_id'))
             )],
             'type' => ['required', new Enum(MessageTypeEnum::class)],
-            'body' => [Rule::requiredIf(fn() => $this->input('type') === MessageTypeEnum::TEXT->value), 'string'],
-            'attachment' => [Rule::requiredIf(fn() => $this->input('type') !== MessageTypeEnum::TEXT->value), 'file'],
+            'body' => [Rule::requiredIf(fn () => $this->input('type') === MessageTypeEnum::TEXT->value), 'string'],
+            'attachment' => [Rule::requiredIf(fn () => $this->input('type') !== MessageTypeEnum::TEXT->value), 'prohibited_if:type,'.MessageTypeEnum::TEXT->value,
+                'file', 'max:10240', 'mimetypes:'.implode(',', MessageTypeEnum::tryFrom((string) $this->input('type'))?->allowedMimeTypes() ?? [])],
         ];
     }
 }

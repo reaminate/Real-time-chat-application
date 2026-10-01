@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\MessageTypeEnum;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class UpdateMessageRequest extends FormRequest
 {
@@ -27,7 +25,12 @@ class UpdateMessageRequest extends FormRequest
         return [
             'conversation_id' => ['required', 'exists:conversations,id'],
             'body' => ['sometimes', 'string'],
-            'attachment' => ['sometimes', 'file', 'max:2048'],
+            'attachment' => [
+                'sometimes',
+                'file',
+                'max:10240',
+                'mimetypes:'.implode(',', $this->route('message')->type->allowedMimeTypes()),
+            ],
         ];
     }
 }
