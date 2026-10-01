@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::controller(ConversationController::class)->group(function(){
         Route::prefix('conversation/{conversation}')->group(function(){
             Route::get('/messages', 'show');
+            Route::get('/members_in', 'showMembers');
             Route::post('/users', 'addUsers');
             Route::delete('/users', 'deleteUsers');
             Route::post('/typing', 'userTyping');

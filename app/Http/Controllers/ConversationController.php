@@ -237,4 +237,18 @@ class ConversationController extends Controller
 
         return response()->json(ConversationResource::make($conversation), 200);
     }
+
+    public function showMembers(Request $request, Conversation $conversation)
+    {
+        if($request->user()->cannot('view', $conversation)){
+            abort(403);
+        }
+        //mainly used for restore so owener can see the 'soft' deleted users
+        if($request->user()->can('restore', $conversation)){
+            $conversation->load('allUsers');
+        }else{
+            $conversation->load('users');
+        }
+        return response()->json([ConversationResource::make($conversation)], 200);
+    }
 }

@@ -83,6 +83,7 @@ Two endpoints return their own error bodies: [Update Conversation](#update-conve
 ```
 
 - [`GET /me`](#current-user) is also wrapped in `data`.
+- [List Members](#list-members) returns the object inside an array (`[ {...} ]`).
 - All other endpoints return the object directly.
 
 ---
@@ -299,7 +300,7 @@ Returns users who are currently logged in. Cached for 60 seconds. Users are retu
 
 | Action                                    | Who can do it      |
 |-------------------------------------------|--------------------|
-| View, send typing indicator, view pinned  | Any active member  |
+| View, list members, send typing indicator, view pinned | Any active member  |
 | Update, add users, remove users, pin      | `owner` or `admin` |
 | Delete, restore users, force-delete users | `owner` only       |
 
@@ -347,20 +348,58 @@ Returns the conversation with all its messages (newest first, each with its send
 
 Opening a conversation marks its new messages as **delivered**: it broadcasts [`MessageDelivered`](#real-time-events) to the other members with the IDs of the messages sent by others since your last read message. Messages are marked as **read** one at a time, when you open each one with [Get Message](#get-message).
 
-| Query Param  | Type | Required | Description         |
-|--------------|------|----------|---------------------|
-| `created_by` | flag | No       | Include the creator |
+| Query Param  | Type | Required | Description                                                    |
+|--------------|------|----------|----------------------------------------------------------------|
+| `created_by` | flag | No       | Include the creator as `created_by`                            |
 
-Flags only need to be present, e.g. `?created_by`.
+Flags only need to be present, e.g. `?created_by`. To get the members, use [List Members](#list-members).
 
 **Responses**
 
-| Status | When                                                 |
-|--------|------------------------------------------------------|
-| `200`  | [Conversation object](#conversation) with `messages` |
+| Status | When                                                                                     |
+|--------|------------------------------------------------------------------------------------------|
+| `200`  | [Conversation object](#conversation) with `messages`, plus `created_by` if requested     |
 | `401`  | Not logged in                                        |
 | `403`  | You are not an active member                         |
 | `404`  | Conversation not found                               |
+
+---
+
+### List Members
+
+`GET /conversation/{id}/members_in` 🔒
+
+Returns the conversation with its members. What you get depends on your role:
+
+| Role                | Field         | Contains                                                                                                   |
+|---------------------|---------------|------------------------------------------------------------------------------------------------------------|
+| `admin` / `member`  | `members`     | Active members only                                                                                        |
+| `owner`             | `all_members` | Active members **and** removed users who haven't been permanently removed. Removed users have a `left_at` |
+
+The owner uses `all_members` to find users to [restore](#restore-removed-users) or [permanently remove](#permanently-remove-users): those are the ones with `left_at`. The owner's response has no `members` field.
+
+**Responses**
+
+| Status | When                                                     |
+|--------|----------------------------------------------------------|
+| `200`  | [Conversation object](#conversation), wrapped in an array |
+| `401`  | Not logged in                                            |
+| `403`  | You are not an active member                             |
+| `404`  | Conversation not found                                   |
+
+```json
+[
+  {
+    "id": 7,
+    "type": "group_convo",
+    "name": "Friends",
+    "all_members": [
+      { "id": 1, "name": "Owner", "...": "User object" },
+      { "id": 5, "name": "Jane Doe", "...": "User object", "left_at": "2026-09-30" }
+    ]
+  }
+]
+```
 
 ---
 
@@ -972,6 +1011,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "friend_id": "jane-doe-1234",
   "avatar": {},
   "last_seen_at": "2026-09-27T10:00:00Z",
+  "left_at": "2026-09-30",
   "conversations": [],
   "created_conversations": []
 }
@@ -980,6 +1020,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 - `id` — numeric user ID, used in request bodies such as `users` and `add_users` (URLs use `friend_id`)
 - `avatar` — *optional*, an [Attachment object](#attachment)
 - `last_seen_at` — *optional*, only shown when the user is offline
+- `left_at` — *optional*, only shown in a conversation's member list for users who were removed from it
 - `conversations`, `created_conversations` — *optional*
 
 ### Conversation
@@ -992,12 +1033,14 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "last_message": {},
   "created_by": {},
   "members": [],
+  "all_members": [],
   "messages": []
 }
 ```
 
 - `name` — `"direct_conversation"` for direct conversations
 - `last_message`, `created_by`, `members`, `messages` — *optional*
+- `all_members` — *optional*, only shown to the `owner` by [List Members](#list-members); active members plus removed users who haven't been permanently removed (those have `left_at`)
 
 ### Message
 

@@ -43,6 +43,7 @@ class ConversationTest extends TestCase
             'update' => ['patchJson', '/api/conversation/1'],
             'destroy' => ['deleteJson', '/api/conversation/1'],
             'messages' => ['getJson', '/api/conversation/1/messages'],
+            'members' => ['getJson', '/api/conversation/1/members_in'],
             'add users' => ['postJson', '/api/conversation/1/users'],
             'delete users' => ['deleteJson', '/api/conversation/1/users'],
             'typing' => ['postJson', '/api/conversation/1/typing'],
@@ -175,6 +176,64 @@ class ConversationTest extends TestCase
         Sanctum::actingAs(User::factory()->create());
 
         $this->getJson('/api/conversation/999/messages')->assertNotFound();
+    }
+
+    // members
+
+    public function test_members_shows_owner_active_and_left_users(): void
+    {
+        [$me, $other, $leaver] = User::factory(3)->create();
+        $conversation = $this->groupWith($me, $other);
+        ConversationMember::factory()->left()->create(['user_id' => $leaver->id, 'conversation_id' => $conversation->id]);
+        Sanctum::actingAs($me);
+
+        $response = $this->getJson("/api/conversation/{$conversation->id}/members_in")
+            ->assertOk()
+            ->assertJsonMissingPath('0.members')
+            ->assertJsonCount(3, '0.all_members');
+
+        $members = collect($response->json('0.all_members'))->keyBy('id');
+        $this->assertEqualsCanonicalizing([$me->id, $other->id, $leaver->id], $members->keys()->all());
+        $this->assertNotNull($members[$leaver->id]['left_at']);
+        $this->assertArrayNotHasKey('left_at', $members[$me->id]);
+        $this->assertArrayNotHasKey('left_at', $members[$other->id]);
+    }
+
+    public function test_members_shows_plain_member_only_active_users(): void
+    {
+        [$owner, $me, $leaver] = User::factory(3)->create();
+        $conversation = $this->groupWith($owner, $me);
+        ConversationMember::factory()->left()->create(['user_id' => $leaver->id, 'conversation_id' => $conversation->id]);
+        Sanctum::actingAs($me);
+
+        $response = $this->getJson("/api/conversation/{$conversation->id}/members_in")
+            ->assertOk()
+            ->assertJsonMissingPath('0.all_members')
+            ->assertJsonCount(2, '0.members');
+
+        $this->assertEqualsCanonicalizing(
+            [$owner->id, $me->id],
+            array_column($response->json('0.members'), 'id'),
+        );
+        $response->assertJsonMissingPath('0.members.0.left_at')->assertJsonMissingPath('0.members.1.left_at');
+    }
+
+    public function test_members_forbids_user_who_left_with_403(): void
+    {
+        [$owner, $leaver] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, User::factory()->create());
+        ConversationMember::factory()->left()->create(['user_id' => $leaver->id, 'conversation_id' => $conversation->id]);
+        Sanctum::actingAs($leaver);
+
+        $this->getJson("/api/conversation/{$conversation->id}/members_in")->assertForbidden();
+    }
+
+    public function test_members_forbids_non_member_with_403(): void
+    {
+        $conversation = $this->groupWith(User::factory()->create());
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson("/api/conversation/{$conversation->id}/members_in")->assertForbidden();
     }
 
     // update

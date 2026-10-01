@@ -21,6 +21,7 @@ class ConversationResource extends JsonResource
             'last_message' => MessageResource::make($this->whenLoaded('lastMessage')),
             'created_by' => UserResource::make($this->whenLoaded('createdBy')),
             'members' => UserResource::collection($this->whenLoaded('users')),
+            'all_members' => UserResource::collection($this->whenLoaded('allUsers')),
             'messages' => MessageResource::collection($this->whenLoaded('messages'))
         ];
     }
