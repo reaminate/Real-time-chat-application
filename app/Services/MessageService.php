@@ -81,13 +81,17 @@ class MessageService
 
     public function show(Message $message, Request $request, User $user): Message
     {
-        $message->load(['user', 'user.avatar', 'attachments'])
-            ->when($request->has('conversation_information'), fn ($query) => $query->load('conversation'))
-            ->when($request->has('reply_to'), fn ($query) => $query->load('replyTo'))
-            ->when($request->has('replies'), fn ($query) => $query->load('replies'));
-        if ($message->__get('type') != MessageTypeEnum::TEXT->value) {
-            $message->load('attachments');
+        $relations = ['user', 'user.avatar', 'attachments'];
+        if ($request->has('conversation_information')) {
+            $relations[] = 'conversation';
         }
+        if ($request->has('reply_to')) {
+            $relations[] = 'replyTo';
+        }
+        if ($request->has('replies')) {
+            $relations[] = 'replies';
+        }
+        $message->load($relations);
 
         $user->conversationMembers()->where('conversation_id', $message->conversation_id)
             ->update([

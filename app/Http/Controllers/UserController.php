@@ -12,7 +12,6 @@ use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -63,14 +62,9 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user, UserService $service)
     {
-        if ($request->user()->cannot('update', $user)) {
-            abort(403);
-        }
+        //policy check in the request form
         $validated = $request->validated();
-        if (isset($validated['new_password']) && ! Hash::check($validated['password'], $user->password)) {
-            return response('', 422);
-        }
-        $user = $service->update($validated, $request, $user);
+        $user = $service->update($validated, $request, $user)->load('avatar');
         broadcast(new UserUpdatedInfo($user));
 
         return response()->json(UserResource::make($user), 200);

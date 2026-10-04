@@ -84,7 +84,7 @@ class AuthService
         }
         RateLimiter::hit($key);
 
-        $user = User::where('email', $validated['email'])->firstOrFail();
+        $user = User::where('email', $validated['email'])->firstOrFail()->load('avatar');
         if(!Hash::check($validated['password'], $user->password)){
             throw ValidationException::withMessages([
                 'error' => 'wrong_password',

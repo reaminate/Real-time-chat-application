@@ -25,6 +25,7 @@ class UserService
                 $this->storeAvatarFor($request, $user);
                 unset($validated['avatar']);
             }
+            unset($validated['password']);
             if(isset($validated['new_password'])){
                 $validated['password'] = $validated['new_password'];
                 unset($validated['new_password']);

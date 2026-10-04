@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
+    //shows all the user notifications and reads them
     public function notifications(Request $request)
     {
         $user = $request->user();
@@ -18,6 +19,7 @@ class NotificationController extends Controller
         }
         return $notifications;
     }
+    //'tag' a user, sends them a notification
     public function notifyUser(Request $request, User $user, Conversation $conversation) 
     {
         if($request->user()->cannot('notifyUser', [$user, $conversation])) //taken from user policy.

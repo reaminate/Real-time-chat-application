@@ -38,7 +38,11 @@ class ConversationController extends Controller
         if ($user->cannot('viewAny', Conversation::class)) {
             abort(403);
         }
-        $conversations = $user->conversations()->with('lastMessage')->cursorPaginate(20);
+        $conversations = $user->conversations()
+            ->with('lastMessage')
+            ->orderByDesc('conversations.last_message_id')
+            //->orderByDesc('conversations.id')
+            ->cursorPaginate(20);
 
         return ConversationResource::collection($conversations);
     }
