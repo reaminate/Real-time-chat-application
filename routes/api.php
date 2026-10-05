@@ -27,6 +27,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::controller(MessageController::class)->group(function(){
         Route::get('/message/{message}/restore', 'restore')->withTrashed();
         Route::delete('/message/{message}/force_delete', 'forceDelete')->withTrashed();
+        Route::middleware('throttle:reactions')->group(function(){
+            Route::post('/message/{message}/like', 'like');
+            Route::post('/message/{message}/dislike', 'dislike');
+            Route::delete('/message/{message}/remove_reaction', 'removeReaction');
+        });
     });
     Route::controller(ConversationController::class)->group(function(){
         Route::prefix('conversation/{conversation}')->group(function(){

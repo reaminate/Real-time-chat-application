@@ -27,6 +27,8 @@ class MessageResource extends JsonResource
             'type' => $this->__get('type'),
             'body' => $this->__get('body') ?? AttachmentResource::collection($this->whenLoaded('attachments')),
             'is_pinned' => $this->__get('is_pinned'),
+            'liked_users' => UserResource::collection($this->whenLoaded('likedUsers')),
+            'disliked_users' => UserResource::collection($this->whenLoaded('dislikedUsers')),
             'edited_at' => $this->when($this->__get('edited_at')!=null, $this->__get('edited_at')),
         ];
     }

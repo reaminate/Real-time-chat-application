@@ -6,10 +6,13 @@ use App\Enums\AttachmentCollectionEnum;
 use App\Models\Attachment;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
+use App\Models\LikeMessage;
 use App\Models\Message;
 use App\Models\User;
+use App\Notifications\UserReactedToYourMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -45,6 +48,9 @@ class MessageTest extends TestCase
             'destroy' => ['deleteJson', '/api/message/1'],
             'restore' => ['getJson', '/api/message/1/restore'],
             'force delete' => ['deleteJson', '/api/message/1/force_delete'],
+            'like' => ['postJson', '/api/message/1/like'],
+            'dislike' => ['postJson', '/api/message/1/dislike'],
+            'remove reaction' => ['deleteJson', '/api/message/1/remove_reaction'],
         ];
     }
 
@@ -467,5 +473,292 @@ class MessageTest extends TestCase
         $this->deleteJson("/api/message/{$message->id}/force_delete")->assertForbidden();
 
         $this->assertModelExists($message);
+    }
+
+    // like / dislike
+
+    public function test_like_adds_user_to_liked_users(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/like")
+            ->assertOk()
+            ->assertJsonPath('liked_users.0.id', $me->id)
+            ->assertJsonCount(0, 'disliked_users');
+
+        $this->assertDatabaseHas('like_message', ['message_id' => $message->id, 'user_id' => $me->id, 'liked' => true]);
+    }
+
+    public function test_dislike_adds_user_to_disliked_users(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/dislike")
+            ->assertOk()
+            ->assertJsonPath('disliked_users.0.id', $me->id)
+            ->assertJsonCount(0, 'liked_users');
+
+        $this->assertDatabaseHas('like_message', ['message_id' => $message->id, 'user_id' => $me->id, 'liked' => false]);
+    }
+
+    public function test_dislike_switches_an_existing_like(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        LikeMessage::factory()->liked()->create(['message_id' => $message->id, 'user_id' => $me->id]);
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/dislike")
+            ->assertOk()
+            ->assertJsonCount(0, 'liked_users')
+            ->assertJsonPath('disliked_users.0.id', $me->id);
+
+        $this->assertDatabaseCount('like_message', 1);
+        $this->assertDatabaseHas('like_message', ['message_id' => $message->id, 'user_id' => $me->id, 'liked' => false]);
+    }
+
+    public function test_liking_twice_keeps_a_single_reaction(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+        $this->postJson("/api/message/{$message->id}/like")->assertOk()->assertJsonCount(1, 'liked_users');
+
+        $this->assertDatabaseCount('like_message', 1);
+    }
+
+    public function test_like_keeps_other_users_reactions(): void
+    {
+        [$me, $other, $third] = User::factory(3)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other, $third));
+        LikeMessage::factory()->liked()->create(['message_id' => $message->id, 'user_id' => $third->id]);
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk()->assertJsonCount(2, 'liked_users');
+    }
+
+    public function test_like_forbids_non_member_with_403(): void
+    {
+        $owner = User::factory()->create();
+        $message = $this->messageFrom($owner, $this->groupWith($owner));
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson("/api/message/{$message->id}/like")->assertForbidden();
+        $this->postJson("/api/message/{$message->id}/dislike")->assertForbidden();
+
+        $this->assertDatabaseCount('like_message', 0);
+    }
+
+    public function test_like_forbids_member_who_left_with_403(): void
+    {
+        [$owner, $leaver] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner);
+        ConversationMember::factory()->left()->create(['user_id' => $leaver->id, 'conversation_id' => $conversation->id]);
+        $message = $this->messageFrom($owner, $conversation);
+        Sanctum::actingAs($leaver);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertForbidden();
+    }
+
+    public function test_like_returns_404_for_unknown_message(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/message/999/like')->assertNotFound();
+    }
+
+    // remove reaction
+
+    public static function reactionStates(): array
+    {
+        return [
+            'like' => [true],
+            'dislike' => [false],
+        ];
+    }
+
+    #[DataProvider('reactionStates')]
+    public function test_remove_reaction_deletes_own_reaction(bool $liked): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        LikeMessage::factory()->create(['message_id' => $message->id, 'user_id' => $me->id, 'liked' => $liked]);
+        Sanctum::actingAs($me);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction")
+            ->assertOk()
+            ->assertJsonCount(0, 'liked_users')
+            ->assertJsonCount(0, 'disliked_users');
+
+        $this->assertDatabaseCount('like_message', 0);
+    }
+
+    public function test_remove_reaction_forbids_user_without_reaction_with_403(): void
+    {
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($other, $me));
+        Sanctum::actingAs($me);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction")->assertForbidden();
+    }
+
+    public function test_remove_reaction_forbids_member_removing_someone_elses_with_403(): void
+    {
+        [$owner, $me, $other] = User::factory(3)->create();
+        $message = $this->messageFrom($owner, $this->groupWith($owner, $me, $other));
+        LikeMessage::factory()->create(['message_id' => $message->id, 'user_id' => $me->id]);
+        LikeMessage::factory()->create(['message_id' => $message->id, 'user_id' => $other->id]);
+        Sanctum::actingAs($me);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction", ['user_id' => $other->id])->assertForbidden();
+
+        $this->assertDatabaseHas('like_message', ['message_id' => $message->id, 'user_id' => $other->id]);
+    }
+
+    public function test_remove_reaction_lets_admin_remove_someone_elses(): void
+    {
+        [$owner, $admin, $member] = User::factory(3)->create();
+        $conversation = $this->groupWith($owner, $member);
+        ConversationMember::factory()->admin()->create(['user_id' => $admin->id, 'conversation_id' => $conversation->id]);
+        $message = $this->messageFrom($owner, $conversation);
+        LikeMessage::factory()->create(['message_id' => $message->id, 'user_id' => $member->id]);
+        Sanctum::actingAs($admin);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction", ['user_id' => $member->id])->assertOk();
+
+        $this->assertDatabaseCount('like_message', 0);
+    }
+
+    public function test_remove_reaction_rejects_unknown_user_id_with_422(): void
+    {
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction", ['user_id' => 999])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('user_id');
+    }
+
+    // reaction notifications
+
+    public function test_reacting_notifies_message_sender(): void
+    {
+        Notification::fake();
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/dislike")->assertOk();
+
+        Notification::assertSentTo($other, UserReactedToYourMessage::class, fn ($n) => $n->user->is($me)
+            && $n->liked === false
+            && $n->toArray($other)['reactor_id'] === $me->id);
+    }
+
+    public function test_reacting_to_own_message_sends_no_notification(): void
+    {
+        Notification::fake();
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_repeating_the_same_reaction_notifies_each_time(): void
+    {
+        Notification::fake();
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($other, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+
+        Notification::assertSentToTimes($other, UserReactedToYourMessage::class, 2);
+    }
+
+    // reaction rate limit
+
+    private function exhaustReactionLimit(Message $message): void
+    {
+        for ($i = 0; $i < 30; $i++) {
+            $this->postJson("/api/message/{$message->id}/like")->assertOk();
+        }
+    }
+
+    public function test_reactions_are_throttled_after_30_per_minute(): void
+    {
+        Notification::fake();
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+
+        $this->exhaustReactionLimit($message);
+
+        $this->postJson("/api/message/{$message->id}/like")
+            ->assertTooManyRequests()
+            ->assertJsonPath('message', 'too many reactions in 1 minute')
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Remaining', 0);
+    }
+
+    public function test_reaction_limit_is_shared_across_reaction_routes(): void
+    {
+        Notification::fake();
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+
+        $this->exhaustReactionLimit($message);
+
+        $this->postJson("/api/message/{$message->id}/dislike")->assertTooManyRequests();
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction")->assertTooManyRequests();
+    }
+
+    public function test_reaction_limit_is_tracked_per_user(): void
+    {
+        Notification::fake();
+        [$me, $other] = User::factory(2)->create();
+        $message = $this->messageFrom($me, $this->groupWith($me, $other));
+        Sanctum::actingAs($me);
+        $this->exhaustReactionLimit($message);
+
+        Sanctum::actingAs($other);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+    }
+
+    public function test_reaction_limit_resets_after_a_minute(): void
+    {
+        Notification::fake();
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+        $this->exhaustReactionLimit($message);
+
+        $this->travel(61)->seconds();
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+    }
+
+    public function test_reaction_limit_does_not_affect_other_message_routes(): void
+    {
+        Notification::fake();
+        $me = User::factory()->create();
+        $message = $this->messageFrom($me, $this->groupWith($me));
+        Sanctum::actingAs($me);
+        $this->exhaustReactionLimit($message);
+
+        $this->getJson("/api/message/{$message->id}")->assertOk();
     }
 }

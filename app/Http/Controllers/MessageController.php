@@ -8,10 +8,15 @@ use App\Events\MessageRead;
 use App\Events\MessageRestored;
 use App\Events\MessageSent;
 use App\Events\MessageUpdated;
+use App\Events\UserReacted;
+use App\Events\UserUnreacted;
+use App\Http\Requests\DeleteUserReaction;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
 use App\Http\Resources\MessageResource;
 use App\Models\Message;
+use App\Models\User;
+use App\Notifications\UserReactedToYourMessage;
 use App\Services\MessageService;
 use Illuminate\Http\Request;
 
@@ -125,4 +130,51 @@ class MessageController extends Controller
 
         return response()->json(MessageResource::make($message), 201);
     }
+
+    /**
+     * like a message (turns an existing dislike into a like)
+     */
+    public function like(Message $message, Request $request, MessageService $service)
+    {
+        if ($request->user()->cannot('likeAndUnlike', $message)) {
+            abort(403);
+        }
+
+        $service->react($message, $request, true);
+        return response()->json(MessageResource::make($message), 200);
+    }
+
+    /**
+     * dislike a message (turns an existing like into a dislike)
+     */
+    public function dislike(Message $message, Request $request, MessageService $service)
+    {
+        if ($request->user()->cannot('likeAndUnlike', $message)) {
+            abort(403);
+        }
+
+        $service->react($message, $request, false);
+
+        return response()->json(MessageResource::make($message), 200);
+    }
+
+    /**
+     * remove a like/dislike from a message, defaults to the current user's own reaction
+     */
+    public function removeReaction(Message $message, DeleteUserReaction $request, MessageService $service)
+    {
+        $validated = $request->validated();
+        $target = isset($validated['user_id'])
+            ? User::findOrFail($validated['user_id'])
+            : $request->user();
+
+        if ($request->user()->cannot('removeLikeAndUnlike', [$message, $target])) {
+            abort(403);
+        }
+        $service->removeReaction($message, $request, $target);
+
+        return response()->json(MessageResource::make($message), 200);
+        
+    }
+    
 }

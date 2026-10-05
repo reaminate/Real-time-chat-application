@@ -22,10 +22,7 @@ class MessagePolicy
      */
     public function view(User $user, Message $message): bool
     {
-        return $message->conversation->conversationMembers()
-            ->where('user_id', $user->__get('id'))
-            ->whereNull('left_at')
-            ->exists();
+        return $this->isMember($user, $message);
     }
 
     /**
@@ -67,6 +64,24 @@ class MessagePolicy
     {
         return $this->isAdmin($user, $message);
     }
+    public function likeAndUnlike(User $user, Message $message): bool 
+    {
+        return $this->isMember($user, $message);
+    }
+    
+    /**
+     * admins can remove anyone's reaction, others can only remove their own
+     */
+    public function removeLikeAndUnlike(User $user, Message $message, User $target): bool
+    {
+        if ($this->isAdmin($user, $message)) {
+            return true;
+        }
+
+        return $user->is($target)
+            && $message->reactedUsers()->whereKey($user->__get('id'))->exists();
+    }
+    
     /**
      * returns true if youre the owner of the message
      * @param User $user
@@ -90,6 +105,18 @@ class MessagePolicy
         ->where('role', '!=' ,ConversationRoleEnum::MEMBER)
         ->exists();
     }
-    
+    /**
+     * returns true if the user is part of this coversation
+     * @param User $user
+     * @param Message $message
+     * @return void
+     */
+    private function isMember(User $user, Message $message): bool
+    {
+        return $message->conversation->conversationMembers()
+            ->where('user_id', $user->__get('id'))
+            ->whereNull('left_at')
+            ->exists();
+    }
     
 }

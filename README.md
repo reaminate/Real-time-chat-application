@@ -1,6 +1,6 @@
 # RTC App — API Documentation
 
-A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, pinned messages, reply notifications, tagging users, typing indicators, delivered/read receipts, and real-time broadcasting over private channels.
+A real-time chat API built with Laravel. It supports direct and group conversations, text/image/file messages, replies, pinned messages, likes and dislikes on messages, reply and reaction notifications, tagging users, typing indicators, delivered/read receipts, and real-time broadcasting over private channels.
 
 ## Table of Contents
 
@@ -46,6 +46,7 @@ Routes marked 🔒 require authentication via Laravel Sanctum. Only `register` a
 | `404`  | Resource not found                                    |
 | `405`  | HTTP method not allowed on this route                 |
 | `422`  | Validation failed                                     |
+| `429`  | Too many requests ([reactions](#reaction-rate-limit) only) |
 | `500`  | Server or database error                              |
 
 **Error body formats**
@@ -56,7 +57,7 @@ Routes marked 🔒 require authentication via Laravel Sanctum. Only `register` a
 { "message": "This action is unauthorized." }
 ```
 
-`422` (validation, including rate limiting and wrong password):
+`422` (validation, including login/register rate limiting and wrong password):
 
 ```json
 {
@@ -65,6 +66,12 @@ Routes marked 🔒 require authentication via Laravel Sanctum. Only `register` a
     "email": ["The email field is required."]
   }
 }
+```
+
+`429` (see [Reaction Rate Limit](#reaction-rate-limit)):
+
+```json
+{ "message": "too many reactions in 1 minute" }
 ```
 
 Two endpoints return their own error bodies: [Update Conversation](#update-conversation) and [Remove Users](#remove-users) (`{ "error": "..." }`), and [Update User](#update-user) (`422` with an empty body).
@@ -643,6 +650,8 @@ Returns the conversation with only its pinned messages (newest first, each with 
 | Edit                  | The sender                                       |
 | Delete (soft)         | The sender, or a conversation `owner` or `admin` |
 | Restore, force-delete | A conversation `owner` or `admin`                |
+| Like, dislike         | Active members of the conversation               |
+| Remove a reaction     | Your own: anyone who has reacted. Someone else's: a conversation `owner` or `admin` |
 
 ### List My Messages
 
@@ -698,7 +707,7 @@ Use `multipart/form-data` when sending an attachment. Sending a message:
 
 `GET /message/{id}` 🔒
 
-Always includes the sender (with avatar). Attachments are included for `image`/`file` messages.
+Always includes the sender (with avatar), `liked_users` and `disliked_users`. Attachments are included for `image`/`file` messages.
 
 Marks the message as **read** for you (sets it as your last read message in the conversation) and broadcasts [`MessageRead`](#real-time-events) to the other members. Call this for each message as the user reads it.
 
@@ -794,6 +803,89 @@ Works on both normal and soft-deleted messages. Broadcasts [`MessageDeletedForev
 
 ---
 
+### Reaction Rate Limit
+
+[Like](#like-message), [Dislike](#dislike-message) and [Remove Reaction](#remove-reaction) share a limit of **30 requests per minute per user**. All three endpoints count towards the same limit, across all messages. For example, 20 likes followed by 10 dislikes on different messages uses up the whole minute. Other message endpoints are not affected.
+
+Once the limit is reached, the reaction endpoints return `429` until the minute is up:
+
+```json
+{ "message": "too many reactions in 1 minute" }
+```
+
+Every reaction response includes these headers:
+
+| Header                  | Meaning                                         |
+|-------------------------|-------------------------------------------------|
+| `X-RateLimit-Limit`     | `30`                                            |
+| `X-RateLimit-Remaining` | Requests left in the current minute             |
+| `Retry-After`           | Only on `429`: seconds until you can react again |
+
+---
+
+### Like Message
+
+`POST /message/{id}/like` 🔒
+
+Likes the message. Each user has at most one reaction per message, so liking a message you disliked switches it to a like, and liking a message you already liked leaves the stored reaction unchanged. No body.
+
+Every call broadcasts [`UserReacted`](#real-time-events) to the conversation and sends a [`UserReactedToYourMessage`](#notifications) notification to the sender (not when reacting to your own message), including when you repeat the same reaction.
+
+**Responses**
+
+| Status | When                                                                                  |
+|--------|---------------------------------------------------------------------------------------|
+| `200`  | Liked; returns the [Message object](#message) with `liked_users` and `disliked_users` |
+| `401`  | Not logged in                                                                         |
+| `403`  | You are not an active member of the conversation                                      |
+| `404`  | Message not found                                                                     |
+| `429`  | [Reaction rate limit](#reaction-rate-limit) reached                                   |
+
+---
+
+### Dislike Message
+
+`POST /message/{id}/dislike` 🔒
+
+Same as [Like Message](#like-message), but dislikes it. Disliking a message you liked switches it to a dislike.
+
+**Responses**
+
+| Status | When                                                                                     |
+|--------|------------------------------------------------------------------------------------------|
+| `200`  | Disliked; returns the [Message object](#message) with `liked_users` and `disliked_users` |
+| `401`  | Not logged in                                                                            |
+| `403`  | You are not an active member of the conversation                                         |
+| `404`  | Message not found                                                                        |
+| `429`  | [Reaction rate limit](#reaction-rate-limit) reached                                      |
+
+---
+
+### Remove Reaction
+
+`DELETE /message/{id}/remove_reaction` 🔒
+
+Removes a like or dislike. Without a body it removes your own reaction. A conversation `owner` or `admin` can pass `user_id` to remove someone else's.
+
+If a reaction was removed, this broadcasts [`UserUnreacted`](#real-time-events) to the conversation. An admin removing a reaction that doesn't exist gets `200` with no broadcast.
+
+| Field     | Type | Required | Rules                                                                       |
+|-----------|------|----------|-----------------------------------------------------------------------------|
+| `user_id` | int  | No       | Existing user ID. Defaults to you. Only an `owner` or `admin` can pass someone else |
+
+**Responses**
+
+| Status | When                                                                                  |
+|--------|---------------------------------------------------------------------------------------|
+| `200`  | Removed; returns the [Message object](#message) with `liked_users` and `disliked_users` |
+| `401`  | Not logged in                                                                         |
+| `403`  | You haven't reacted to this message, or you passed someone else's `user_id` without being an `owner` or `admin` |
+| `404`  | Message not found                                                                     |
+| `422`  | `user_id` is not an existing user                                                     |
+| `429`  | [Reaction rate limit](#reaction-rate-limit) reached                                   |
+
+---
+
 ## Attachments
 
 Every [Attachment object](#attachment) includes a `path`, relative to the storage disk it was saved on:
@@ -833,6 +925,7 @@ Notifications are stored in the `notifications` table and broadcast in real time
 |------------------------|--------------------------------------------|------------------------------------------------------------------------------------------|
 | `UserRepliedToMessage` | The author of the message being replied to | [Sending a message](#send-message) with `reply_to` (not sent when replying to yourself)  |
 | `PingUser`             | The tagged user                            | [Tagging a user](#tag-a-user) in a conversation                                          |
+| `UserReactedToYourMessage` | The sender of the message              | [Liking](#like-message) or [disliking](#dislike-message) a message, on every call including repeats (not sent when reacting to your own message) |
 
 ### Tag a User
 
@@ -897,6 +990,9 @@ Echo.private(`App.Models.User.${userId}`)
             case 'App\\Notifications\\PingUser':
                 // notification.user (who tagged you), notification.conversation
                 break;
+            case 'App\\Notifications\\UserReactedToYourMessage':
+                // notification.message_id, notification.conversation_id, notification.reactor_id, notification.liked
+                break;
         }
     });
 ```
@@ -929,6 +1025,22 @@ Echo.private(`App.Models.User.${userId}`)
 - `user` — numeric ID of the user who tagged you
 - `conversation` — numeric ID of the conversation you were tagged in
 
+`UserReactedToYourMessage`:
+
+```json
+{
+  "id": "7e3f0a9c-...",
+  "type": "App\\Notifications\\UserReactedToYourMessage",
+  "message_id": 42,
+  "conversation_id": 7,
+  "reactor_id": 3,
+  "liked": true
+}
+```
+
+- `reactor_id` — numeric ID of the user who reacted
+- `liked` — `true` for a like, `false` for a dislike
+
 ---
 
 ## Real-time Events
@@ -957,6 +1069,8 @@ Events are broadcast on private channels. Authenticate channels with a bearer to
 | `MessageDeleted` | `conversation.{id}`                             | [Deleting a message](#delete-message) (soft delete) | `message` (includes `deleted_at`) |
 | `MessageRestored` | `conversation.{id}`                            | [Restoring a message](#restore-message) | `message`             |
 | `MessageDeletedForever` | `conversation.{id}`                      | [Permanently deleting a message](#permanently-delete-message) | `message` |
+| `UserReacted`  | `conversation.{id}`                               | [Liking](#like-message) or [disliking](#dislike-message) a message (on every call, including repeats) | `message_id`, `user_id`, `liked`, `likes_count`, `dislikes_count` |
+| `UserUnreacted` | `conversation.{id}`                              | [Removing a reaction](#remove-reaction) (only when one was removed) | `message_id`, `user_id`, `likes_count`, `dislikes_count` |
 | `user.typing`  | `conversation.{id}`                               | [Typing indicator](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
 | `user.stopped.typing` | `conversation.{id}`                        | [Stopped typing](#typing-indicator) endpoint | `conversationId`, `userId`, `name` |
 | `user.online`  | `conversation.{id}` for every conversation the user belongs to | [logging in](#login) | `user_id`, `name`, `friend_id` |
@@ -981,6 +1095,16 @@ Events with a dotted name (`user.typing`, `user.stopped.typing`, `user.online`, 
 Echo.private(`conversation.${conversationId}`)
     .listen('MessageDelivered', (e) => { /* e.user, e.messageIds */ })
     .listen('MessageRead', (e) => { /* e.user, e.messageId */ });
+```
+
+**Reactions**
+
+`UserReacted` and `UserUnreacted` carry the new totals, so the client can update the counts without fetching the message again. For `UserUnreacted`, `user_id` is the user whose reaction was removed, which may not be the user who made the request (an admin can remove someone else's).
+
+```js
+Echo.private(`conversation.${conversationId}`)
+    .listen('UserReacted', (e) => { /* e.message_id, e.user_id, e.liked, e.likes_count, e.dislikes_count */ })
+    .listen('UserUnreacted', (e) => { /* e.message_id, e.user_id, e.likes_count, e.dislikes_count */ });
 ```
 
 ---
@@ -1055,6 +1179,8 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
   "type": "text",
   "body": "Hello!",
   "is_pinned": false,
+  "liked_users": [],
+  "disliked_users": [],
   "edited_at": "2026-09-27T10:05:00Z"
 }
 ```
@@ -1063,6 +1189,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 - `conversation_more_information` — *optional*, only shown to conversation admins/owner
 - `sender`, `reply_to`, `replies` — *optional*
 - `is_pinned` — whether the message is pinned in its conversation (see [Pin Message](#pin-message))
+- `liked_users`, `disliked_users` — *optional*, lists of [User objects](#user). Returned by [Get Message](#get-message) and the [reaction endpoints](#like-message)
 - `edited_at` — *optional*, only shown if the message was edited
 
 ### Attachment

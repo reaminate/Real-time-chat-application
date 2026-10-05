@@ -17,10 +17,13 @@ use App\Events\UserDeleted;
 use App\Events\UserDeletedForever;
 use App\Events\UserOffline;
 use App\Events\UserOnline;
+use App\Events\UserReacted;
 use App\Events\UserStoppedTyping;
+use App\Events\UserUnreacted;
 use App\Events\UserUpdatedInfo;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
+use App\Models\LikeMessage;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -344,6 +347,106 @@ class BroadcastingTest extends TestCase
         Event::assertDispatched(ConversationDeleted::class, fn (ConversationDeleted $e) => $this->channelNames($e->broadcastOn())
             === collect([$a, $b])->map(fn ($u) => 'private-user.'.$u->id)->sort()->values()->all()
             && $e->conversation->id === $conversation->id);
+    }
+
+    public function test_like_broadcasts_user_reacted_on_conversation_channel(): void
+    {
+        Event::fake([UserReacted::class]);
+        [$a, $b] = User::factory(2)->create();
+        $conversation = $this->groupWith($a, $b);
+        $message = Message::factory()->create(['sender_id' => $b->id, 'conversation_id' => $conversation->id]);
+        Sanctum::actingAs($a);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+
+        Event::assertDispatched(UserReacted::class, fn (UserReacted $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn()) === ['private-conversation.'.$conversation->id]
+            && $e->broadcastWith() === [
+                'message_id' => $message->id,
+                'user_id' => $a->id,
+                'liked' => true,
+                'likes_count' => 1,
+                'dislikes_count' => 0,
+            ]);
+    }
+
+    public function test_switching_like_to_dislike_broadcasts_user_reacted(): void
+    {
+        Event::fake([UserReacted::class]);
+        [$a, $b] = User::factory(2)->create();
+        $conversation = $this->groupWith($a, $b);
+        $message = Message::factory()->create(['sender_id' => $b->id, 'conversation_id' => $conversation->id]);
+        LikeMessage::factory()->liked()->create(['message_id' => $message->id, 'user_id' => $a->id]);
+        Sanctum::actingAs($a);
+
+        $this->postJson("/api/message/{$message->id}/dislike")->assertOk();
+
+        Event::assertDispatched(UserReacted::class, fn (UserReacted $e) => $e->broadcastWith()['liked'] === false
+            && $e->broadcastWith()['likes_count'] === 0
+            && $e->broadcastWith()['dislikes_count'] === 1);
+    }
+
+    public function test_repeating_the_same_reaction_broadcasts_again(): void
+    {
+        Event::fake([UserReacted::class]);
+        [$a, $b] = User::factory(2)->create();
+        $conversation = $this->groupWith($a, $b);
+        $message = Message::factory()->create(['sender_id' => $b->id, 'conversation_id' => $conversation->id]);
+        LikeMessage::factory()->liked()->create(['message_id' => $message->id, 'user_id' => $a->id]);
+        Sanctum::actingAs($a);
+
+        $this->postJson("/api/message/{$message->id}/like")->assertOk();
+
+        Event::assertDispatched(UserReacted::class);
+    }
+
+    public function test_remove_reaction_broadcasts_user_unreacted_on_conversation_channel(): void
+    {
+        Event::fake([UserUnreacted::class]);
+        [$a, $b, $c] = User::factory(3)->create();
+        $conversation = $this->groupWith($a, $b, $c);
+        $message = Message::factory()->create(['sender_id' => $b->id, 'conversation_id' => $conversation->id]);
+        LikeMessage::factory()->disliked()->create(['message_id' => $message->id, 'user_id' => $a->id]);
+        LikeMessage::factory()->liked()->create(['message_id' => $message->id, 'user_id' => $c->id]);
+        Sanctum::actingAs($a);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction")->assertOk();
+
+        Event::assertDispatched(UserUnreacted::class, fn (UserUnreacted $e) => $e instanceof ShouldBroadcast
+            && $this->channelNames($e->broadcastOn()) === ['private-conversation.'.$conversation->id]
+            && $e->broadcastWith() === [
+                'message_id' => $message->id,
+                'user_id' => $a->id,
+                'likes_count' => 1,
+                'dislikes_count' => 0,
+            ]);
+    }
+
+    public function test_admin_removing_reaction_broadcasts_the_removed_user(): void
+    {
+        Event::fake([UserUnreacted::class]);
+        [$owner, $member] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, $member);
+        $message = Message::factory()->create(['sender_id' => $owner->id, 'conversation_id' => $conversation->id]);
+        LikeMessage::factory()->create(['message_id' => $message->id, 'user_id' => $member->id]);
+        Sanctum::actingAs($owner);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction", ['user_id' => $member->id])->assertOk();
+
+        Event::assertDispatched(UserUnreacted::class, fn (UserUnreacted $e) => $e->user->is($member));
+    }
+
+    public function test_admin_removing_missing_reaction_does_not_broadcast(): void
+    {
+        Event::fake([UserUnreacted::class]);
+        [$owner, $member] = User::factory(2)->create();
+        $conversation = $this->groupWith($owner, $member);
+        $message = Message::factory()->create(['sender_id' => $owner->id, 'conversation_id' => $conversation->id]);
+        Sanctum::actingAs($owner);
+
+        $this->deleteJson("/api/message/{$message->id}/remove_reaction", ['user_id' => $member->id])->assertOk();
+
+        Event::assertNotDispatched(UserUnreacted::class);
     }
 
     public function test_channel_authorization(): void

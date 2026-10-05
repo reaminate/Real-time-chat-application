@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -55,4 +56,29 @@ class Message extends Model
         return $this->morphMany(Attachment::class, 'attachable')
             ->where('collection', AttachmentCollectionEnum::ATTACHMENT->value);
     }
+
+    /**returns the pivot rows in the likeMessage*/
+    public function likeMessages(): HasMany
+    {
+        return $this->hasMany(LikeMessage::class, 'message_id');
+    }
+
+    /**returns all users who liked this message*/
+    public function reactedUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'like_message', 'message_id', 'user_id')
+        ->using(LikeMessage::class)
+        ->withPivot('liked');
+    }
+    /**returns all who liked the message */
+    public function likedUsers(): BelongsToMany
+    {
+        return $this->reactedUsers()->wherePivot('liked', true);
+    }
+    /**returns all who disliked the message */
+    public function dislikedUsers(): BelongsToMany 
+    {
+        return $this->reactedUsers()->wherePivot('liked', false);
+    }
+    
 }

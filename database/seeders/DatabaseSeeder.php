@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
             ConversationMemberSeeder::class,
             MessageSeeder::class,
             AttachmentSeeder::class,
+            LikeMessageSeeder::class,
         ]);
     }
 }

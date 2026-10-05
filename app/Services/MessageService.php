@@ -4,13 +4,18 @@ namespace App\Services;
 
 use App\Enums\AttachmentCollectionEnum;
 use App\Enums\MessageTypeEnum;
+use App\Events\UserReacted;
+use App\Events\UserUnreacted;
+use App\Http\Requests\DeleteUserReaction;
 use App\Http\Requests\StoreMessageRequest;
 use App\Http\Requests\UpdateMessageRequest;
+use App\Http\Resources\MessageResource;
 use App\Models\Attachment;
 use App\Models\Conversation;
 use App\Models\ConversationMember;
 use App\Models\Message;
 use App\Models\User;
+use App\Notifications\UserReactedToYourMessage;
 use App\Notifications\UserRepliedToMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -81,7 +86,7 @@ class MessageService
 
     public function show(Message $message, Request $request, User $user): Message
     {
-        $relations = ['user', 'user.avatar', 'attachments'];
+        $relations = ['user', 'user.avatar', 'attachments', 'likedUsers', 'dislikedUsers'];
         if ($request->has('conversation_information')) {
             $relations[] = 'conversation';
         }
@@ -131,5 +136,35 @@ class MessageService
         }
 
         return $message->attachments()->create($data);
+    }
+
+    public function react(Message $message, Request $request, bool $liked): Message
+    {
+        $user = $request->user();
+        $changes = $message->reactedUsers()->syncWithoutDetaching([
+            $user->__get('id') => ['liked' => $liked],
+        ]);
+
+        broadcast(new UserReacted($message, $user, $liked))->toOthers();
+        if ($message->__get('sender_id') !== $user->__get('id')) {
+            $message->user?->notify(new UserReactedToYourMessage($message, $user, $liked));
+        }
+        $messageWithRelation = $this->loadReactions($message);
+        return $messageWithRelation;
+    }
+    public function removeReaction(Message $message, DeleteUserReaction $request, User $target):Message
+    {
+        $detached = $message->reactedUsers()->detach($target->__get('id'));
+        if ($detached > 0) {
+            broadcast(new UserUnreacted($message, $target))->toOthers();
+        }
+        $messageWithRelation = $this->loadReactions($message);
+        return $messageWithRelation;
+    }
+    
+    private function loadReactions(Message $message): Message
+    {
+        return $message->load(['likedUsers', 'dislikedUsers'])
+            ->loadCount(['likedUsers', 'dislikedUsers']);
     }
 }
