@@ -7,6 +7,7 @@ use App\Models\ConversationMember;
 use App\Models\Message;
 use App\Models\User;
 use App\Notifications\PingUser;
+use App\Notifications\UserReactedToYourMessage;
 use App\Notifications\UserRepliedToMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -27,30 +28,31 @@ class NotificationTest extends TestCase
         return $conversation;
     }
 
-    public function test_reply_and_tag_notify_user_and_fetching_marks_them_read(): void
+    public function test_reply_and_tag_and_react_notify_user_and_fetching_marks_them_read(): void
     {
         [$me, $other] = User::factory(2)->create();
         $conversation = $this->groupWith($me, $other);
         $original = Message::factory()->create(['sender_id' => $other->id, 'conversation_id' => $conversation->id]);
         Sanctum::actingAs($me);
-
+        //replying
         $this->postJson('/api/message', [
             'conversation_id' => $conversation->id,
             'reply_to' => $original->id,
             'type' => 'text',
             'body' => 'reply',
         ])->assertCreated();
-
+        //tagging
         $this->postJson("/api/notify/{$other->friend_id}/in/{$conversation->id}")->assertNoContent();
-
+        //
+        $this->post("/api/message/{$original->id}/like")->assertOk();
         Sanctum::actingAs($other);
-        $this->assertCount(2, $other->unreadNotifications);
+        $this->assertCount(3, $other->unreadNotifications);
         $this->assertEqualsCanonicalizing(
-            [UserRepliedToMessage::class, PingUser::class],
+            [UserRepliedToMessage::class, PingUser::class, UserReactedToYourMessage::class],
             $other->unreadNotifications->pluck('type')->all(),
         );
 
-        $this->getJson('/api/notifications')->assertOk()->assertJsonCount(2);
+        $this->getJson('/api/notifications')->assertOk()->assertJsonCount(3);
 
         $this->assertCount(0, $other->fresh()->unreadNotifications);
         $this->getJson('/api/notifications')->assertOk()->assertJsonCount(0);
