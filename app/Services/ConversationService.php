@@ -95,6 +95,7 @@ class ConversationService
     public function update(array $validated, UpdateConversationRequest $request, Conversation $conversation): Conversation
     {
         if (isset($validated['created_by'])) {
+            //removes current owner (makes him member) and then makes new person owner
             DB::transaction(function () use ($request, $validated, $conversation) {
                 $conversation->lockForUpdate();
                 $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->update(['role' => ConversationRoleEnum::MEMBER->value]);
@@ -176,12 +177,18 @@ class ConversationService
     public function restore(ForceDeleteOrRestoreUserInConversationRequest $request, Conversation $conversation): Collection
     {
         $users = $request->validated('users');
-
-        $conversation->conversationMembers()
-            ->whereIn('user_id', $users)
-            ->whereNotNull('left_at')
-            ->update(['left_at' => null]);
-
+        DB::transaction(function () use ($conversation, $users) {
+            $conversation->conversationMembers()
+                ->whereIn('user_id', $users)
+                ->whereNotNull('left_at')
+                ->update(['left_at' => null]);
+            if ($conversation->type === ConversationTypeEnum::DIRECT) {
+                $conversation->update([
+                    'type' => ConversationTypeEnum::GROUP->value,
+                    'name' => 'New Group',
+                ]);
+            }
+        });
         return User::whereIn('id', $users)->get();
     }
 

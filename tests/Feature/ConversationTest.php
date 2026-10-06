@@ -582,6 +582,24 @@ class ConversationTest extends TestCase
         $this->assertTrue($conversation->users()->whereKey($leaver->id)->exists());
     }
 
+    public function test_restore_promotes_demoted_direct_back_to_group(): void
+    {
+        [$me, $b, $c] = User::factory(3)->create();
+        $conversation = $this->groupWith($me, $b, $c);
+        Sanctum::actingAs($me);
+
+        $this->deleteJson("/api/conversation/{$conversation->id}/users", ['delete_users' => [$c->id]])->assertOk();
+        $this->assertSame(ConversationTypeEnum::DIRECT, $conversation->refresh()->type);
+
+        $this->postJson("/api/conversation/{$conversation->id}/restore?".http_build_query(['users' => [$c->id]]))
+            ->assertOk();
+
+        $conversation->refresh();
+        $this->assertSame(ConversationTypeEnum::GROUP, $conversation->type);
+        $this->assertSame('New Group', $conversation->name);
+        $this->assertCount(3, $conversation->users);
+    }
+
     public function test_restore_rejects_user_who_has_not_left_with_422(): void
     {
         [$me, $other] = User::factory(2)->create();

@@ -12,38 +12,38 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attachments/{attachment}/download', [AttachmentController::class, 'download']);
-    Route::get('/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'meSelf']);
     Route::get('/active-users', [UserController::class, 'currentlyActive']);
-    Route::get('/notifications', [NotificationController::class, 'notifications']);
-    Route::post('/notify/{user}/in/{conversation}', [NotificationController::class, 'notifyUser']);
-    Route::prefix('pin')->group(function(){
-        Route::controller(ConversationController::class)->group(function(){
-            Route::put('/{conversation}/add', 'pinMessage');
-            Route::put('/{conversation}/remove', 'removePinMessage');
-            Route::get('/{conversation}/pinned', 'viewPinnedOnly');
-        });
+    Route::controller(AuthController::class)->group(function(){
+        Route::get('/logout','logout');
+        Route::get('/me', 'meSelf');
     });
-    Route::controller(MessageController::class)->group(function(){
-        Route::get('/message/{message}/restore', 'restore')->withTrashed();
-        Route::delete('/message/{message}/force_delete', 'forceDelete')->withTrashed();
+    Route::controller(NotificationController::class)->group(function(){
+        Route::get('/notifications', 'notifications');
+        Route::post('/notify/{user}/in/{conversation}','notifyUser');
+    });
+    Route::controller(ConversationController::class)->prefix('pin/{conversation}')->group(function(){
+        Route::put('/add', 'pinMessage');
+        Route::put('/remove', 'removePinMessage');
+        Route::get('/pinned', 'viewPinnedOnly');
+    });
+    Route::controller(MessageController::class)->prefix('message/{message}')->group(function(){
+        Route::get('/restore', 'restore')->withTrashed();
+        Route::delete('/force_delete', 'forceDelete')->withTrashed();
         Route::middleware('throttle:reactions')->group(function(){
-            Route::post('/message/{message}/like', 'like');
-            Route::post('/message/{message}/dislike', 'dislike');
-            Route::delete('/message/{message}/remove_reaction', 'removeReaction');
+            Route::post('/like', 'like');
+            Route::post('/dislike', 'dislike');
+            Route::delete('/remove_reaction', 'removeReaction');
         });
     });
-    Route::controller(ConversationController::class)->group(function(){
-        Route::prefix('conversation/{conversation}')->group(function(){
-            Route::get('/messages', 'show');
-            Route::get('/members_in', 'showMembers');
-            Route::post('/users', 'addUsers');
-            Route::delete('/users', 'deleteUsers');
-            Route::post('/typing', 'userTyping');
-            Route::post('/stopped-typing', 'userStoppedTyping');
-            Route::post('/restore', 'restore')->withTrashed();
-            Route::delete('/force_delete', 'forceDelete')->withTrashed();
-        });
+    Route::controller(ConversationController::class)->prefix('conversation/{conversation}')->group(function(){
+        Route::get('/messages', 'show');
+        Route::get('/members_in', 'showMembers');
+        Route::post('/users', 'addUsers');
+        Route::delete('/users', 'deleteUsers');
+        Route::post('/typing', 'userTyping');
+        Route::post('/stopped-typing', 'userStoppedTyping');
+        Route::post('/restore', 'restore')->withTrashed();
+        Route::delete('/force_delete', 'forceDelete')->withTrashed();
     });
     Route::apiResource('/user', UserController::class)->except('store');
     Route::apiResource('/conversation', ConversationController::class)->except('show');
