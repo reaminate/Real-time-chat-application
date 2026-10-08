@@ -255,4 +255,10 @@ class ConversationController extends Controller
         }
         return response()->json(ConversationResource::make($conversation), 200);
     }
+    /**$relation = $request->user()->can('restore', $conversation) ? 'allUsers' : 'users';
+        $conversation->load([
+            $relation => fn ($query) => $query->withExists('tokens'),
+            "$relation.avatar",
+        ]);
+     */
 }

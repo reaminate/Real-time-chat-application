@@ -1223,7 +1223,7 @@ Fields marked *optional* only appear when the relation is loaded or the conditio
 - open the port for it on windows defender
 ```sh
 php artisan migrate               # includes the notifications table
-php artisan storage:link          # serves avatars from /storage
+php artisan storage:link          
 php artisan serve                 # serve normally. dont use --port
 php artisan queue:work            # broadcasts + notifications
 php artisan reverb:start --debug

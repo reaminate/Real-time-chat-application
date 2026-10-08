@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MessageTypeEnum;
 use App\Events\MessageDeleted;
 use App\Events\MessageDeletedForever;
 use App\Events\MessageRead;
@@ -19,6 +20,8 @@ use App\Models\User;
 use App\Notifications\UserReactedToYourMessage;
 use App\Services\MessageService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class MessageController extends Controller
 {
@@ -111,7 +114,14 @@ class MessageController extends Controller
         if ($request->user()->cannot('forceDelete', $message)) {
             abort(403);
         }
-        $message->forceDelete();
+        DB::transaction(function()use($message){
+            if($message->__get('type') != MessageTypeEnum::TEXT){
+                $path = $message->attachments()->pluck('path')->all();
+                $message->attachments()->delete();
+                Storage::disk('local')->delete($path);
+            }
+            $message->forceDelete();
+        });
         broadcast(new MessageDeletedForever($message))->toOthers();
 
         return response()->noContent();

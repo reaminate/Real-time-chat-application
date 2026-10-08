@@ -20,10 +20,23 @@ class UserResource extends JsonResource
             'email' => $this->__get('email'),
             'friend_id' => $this->__get('friend_id'),
             'avatar' => AttachmentResource::make($this->whenLoaded('avatar')),
-            'last_seen_at' => $this->when($this->resource->tokens()->doesntExist(), $this->__get('last_seen_at')),
+            'last_seen_at' => $this->when(! $this->hasTokens(), $this->__get('last_seen_at')),
             'left_at' => $this->when($this->resource->pivot?->left_at !== null, fn () => $this->resource->pivot->left_at),
             'conversations' => ConversationResource::collection($this->whenLoaded('conversations')),
             'created_conversations' => ConversationResource::collection($this->whenLoaded('createdConversations')),
         ];
+    }
+
+    /**
+     * @return bool
+     */
+    protected function hasTokens(): bool
+    {
+        $attributes = $this->resource->getAttributes();
+        if (array_key_exists('tokens_exists', $attributes)) {
+            return (bool) $attributes['tokens_exists'];
+        }
+
+        return $this->resource->tokens()->exists();
     }
 }

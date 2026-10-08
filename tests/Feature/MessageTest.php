@@ -463,6 +463,24 @@ class MessageTest extends TestCase
         $this->assertModelMissing($message);
     }
 
+    public function test_force_delete_removes_attachment_from_disk(): void
+    {
+        [$owner, $admin, $member] = User::factory(3)->create();
+        $conversation = $this->groupWith($owner, $member);
+        ConversationMember::factory()->admin()->create(['user_id' => $admin->id, 'conversation_id' => $conversation->id]);
+        $message = Message::factory()->file()->create(['sender_id' => $member->id, 'conversation_id' => $conversation->id]);
+        Storage::fake('local');
+        Storage::disk('local')->put('attachments/doc.pdf', 'contents');
+        $attachment = Attachment::factory()->document()->create(['attachable_id' => $message->id, 'path' => 'attachments/doc.pdf']);
+        Sanctum::actingAs($admin);
+
+        $this->deleteJson("/api/message/{$message->id}/force_delete")->assertNoContent();
+
+        $this->assertModelMissing($message);
+        $this->assertModelMissing($attachment);
+        Storage::disk('local')->assertMissing('attachments/doc.pdf');
+    }
+
     public function test_force_delete_forbids_plain_member_with_403(): void
     {
         [$owner, $member] = User::factory(2)->create();
