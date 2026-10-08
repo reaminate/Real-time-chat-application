@@ -79,18 +79,28 @@ Two endpoints return their own error bodies: [Update Conversation](#update-conve
 **Response wrapping**
 
 - List endpoints wrap their results in `data`.
-- Cursor-paginated lists (`GET /user`, `GET /message`) also include `links` and `meta`. Pass `meta.next_cursor` as `?cursor=` to get the next page:
+- Paginated lists also include `links` and `meta`, in one of two styles.
+- Page-paginated lists (`GET /user`) take `?page=`. Keep requesting the next page until `links.next` is `null`:
 
 ```json
 {
   "data": [ { "...": "..." } ],
-  "links": { "first": null, "last": null, "prev": null, "next": "https://.../api/user?cursor=eyJ..." },
-  "meta": { "path": "https://.../api/user", "per_page": 20, "next_cursor": "eyJ...", "prev_cursor": null }
+  "links": { "first": "https://.../api/user?page=1", "last": null, "prev": null, "next": "https://.../api/user?page=2" },
+  "meta": { "current_page": 1, "from": 1, "path": "https://.../api/user", "per_page": 20, "to": 20 }
+}
+```
+
+- Cursor-paginated lists (`GET /message`) take `?cursor=`. Pass `meta.next_cursor` to get the next page:
+
+```json
+{
+  "data": [ { "...": "..." } ],
+  "links": { "first": null, "last": null, "prev": null, "next": "https://.../api/message?cursor=eyJ..." },
+  "meta": { "path": "https://.../api/message", "per_page": 10, "next_cursor": "eyJ...", "prev_cursor": null }
 }
 ```
 
 - [`GET /me`](#current-user) is also wrapped in `data`.
-- [List Members](#list-members) returns the object inside an array (`[ {...} ]`).
 - All other endpoints return the object directly.
 
 ---
@@ -203,12 +213,12 @@ Returns the authenticated user with their `avatar`, `conversations` and `created
 
 `GET /user` 🔒
 
-Searches users by name (excludes yourself), ordered by name descending. Each user includes their `avatar`. If `search` is omitted, all users are returned. Cursor-paginated, 20 per page.
+Searches users by name (excludes yourself), ordered by name descending. Each user includes their `avatar`. If `search` is omitted, all users are returned. [Page-paginated](#general), 20 per page.
 
-| Query Param | Type   | Required | Rules                    |
-|-------------|--------|----------|--------------------------|
-| `search`    | string | No       | Letters and spaces only  |
-| `cursor`    | string | No       | Cursor for the next page |
+| Query Param | Type   | Required | Rules                          |
+|-------------|--------|----------|--------------------------------|
+| `search`    | string | No       | Letters and spaces only        |
+| `page`      | int    | No       | Page number, defaults to `1`   |
 
 **Responses**
 
@@ -389,23 +399,21 @@ The owner uses `all_members` to find users to [restore](#restore-removed-users) 
 
 | Status | When                                                     |
 |--------|----------------------------------------------------------|
-| `200`  | [Conversation object](#conversation), wrapped in an array |
+| `200`  | [Conversation object](#conversation)                     |
 | `401`  | Not logged in                                            |
 | `403`  | You are not an active member                             |
 | `404`  | Conversation not found                                   |
 
 ```json
-[
-  {
-    "id": 7,
-    "type": "group_convo",
-    "name": "Friends",
-    "all_members": [
-      { "id": 1, "name": "Owner", "...": "User object" },
-      { "id": 5, "name": "Jane Doe", "...": "User object", "left_at": "2026-09-30" }
-    ]
-  }
-]
+{
+  "id": 7,
+  "type": "group_convo",
+  "name": "Friends",
+  "all_members": [
+    { "id": 1, "name": "Owner", "...": "User object" },
+    { "id": 5, "name": "Jane Doe", "...": "User object", "left_at": "2026-09-30" }
+  ]
+}
 ```
 
 ---

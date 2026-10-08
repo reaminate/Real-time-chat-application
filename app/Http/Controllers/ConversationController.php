@@ -253,6 +253,6 @@ class ConversationController extends Controller
         }else{
             $conversation->load('users');
         }
-        return response()->json([ConversationResource::make($conversation)], 200);
+        return response()->json(ConversationResource::make($conversation), 200);
     }
 }

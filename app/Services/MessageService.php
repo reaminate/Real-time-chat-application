@@ -57,7 +57,6 @@ class MessageService
                 $recipient->notify(new UserRepliedToMessage($message, $request->user()));
             }
         }
-        $message->conversation()->update(['last_message_id' => $message->__get('id')]);
         if ($validated['type'] != MessageTypeEnum::TEXT->value) {
             $this->storeAttachmentFor($request, $message);
             $message->load('attachments');

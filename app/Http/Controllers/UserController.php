@@ -25,7 +25,7 @@ class UserController extends Controller
         }
         $string_of_letters = $request->validated('search');
         $string_of_letters = "%$string_of_letters%";
-        $users = User::whereLike('name', $string_of_letters)->whereNot('name', $request->user()->__get('name'))->orderByDesc('name')->with('avatar')->cursorPaginate(20);
+        $users = User::whereLike('name', $string_of_letters)->whereKeyNot($request->user()->__get('id'))->orderByDesc('name')->with('avatar')->simplePaginate(20);
 
         return UserResource::collection($users);
     }

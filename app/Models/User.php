@@ -58,30 +58,13 @@ class User extends Authenticatable
         return $this->hasMany(Conversation::class, 'created_by');
     }
 
-    /** Returns the messages sent by this user. */
-    public function messages(): HasMany
-    {
-        return $this->hasMany(Message::class, 'sender_id');
-    }
-
     /** Returns this user's single avatar attachment. */
     public function avatar(): MorphOne
     {
         return $this->morphOne(Attachment::class, 'attachable')
             ->where('collection', AttachmentCollectionEnum::AVATAR->value);
     }
-    /**returns the message rows where the user has liked */
-    public function likeMessage(): HasMany
-    {
-        return $this->hasMany(LikeMessage::class, 'user_id');
-    }
-    /**returns all the messages this user has liked*/
-    public function likedMessages(): BelongsToMany 
-    {
-        return $this->belongsToMany(Message::class, 'like_message', 'user_id', 'message_id')
-        ->using(LikeMessage::class);
-    }
-    
+
     protected static function booted():void
     {
         static::saving(function($model){

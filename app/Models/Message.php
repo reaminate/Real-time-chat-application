@@ -57,12 +57,6 @@ class Message extends Model
             ->where('collection', AttachmentCollectionEnum::ATTACHMENT->value);
     }
 
-    /**returns the pivot rows in the likeMessage*/
-    public function likeMessages(): HasMany
-    {
-        return $this->hasMany(LikeMessage::class, 'message_id');
-    }
-
     /**returns all users who liked this message*/
     public function reactedUsers(): BelongsToMany
     {

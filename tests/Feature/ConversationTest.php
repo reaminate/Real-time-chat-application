@@ -189,10 +189,10 @@ class ConversationTest extends TestCase
 
         $response = $this->getJson("/api/conversation/{$conversation->id}/members_in")
             ->assertOk()
-            ->assertJsonMissingPath('0.members')
-            ->assertJsonCount(3, '0.all_members');
+            ->assertJsonMissingPath('members')
+            ->assertJsonCount(3, 'all_members');
 
-        $members = collect($response->json('0.all_members'))->keyBy('id');
+        $members = collect($response->json('all_members'))->keyBy('id');
         $this->assertEqualsCanonicalizing([$me->id, $other->id, $leaver->id], $members->keys()->all());
         $this->assertNotNull($members[$leaver->id]['left_at']);
         $this->assertArrayNotHasKey('left_at', $members[$me->id]);
@@ -208,14 +208,14 @@ class ConversationTest extends TestCase
 
         $response = $this->getJson("/api/conversation/{$conversation->id}/members_in")
             ->assertOk()
-            ->assertJsonMissingPath('0.all_members')
-            ->assertJsonCount(2, '0.members');
+            ->assertJsonMissingPath('all_members')
+            ->assertJsonCount(2, 'members');
 
         $this->assertEqualsCanonicalizing(
             [$owner->id, $me->id],
-            array_column($response->json('0.members'), 'id'),
+            array_column($response->json('members'), 'id'),
         );
-        $response->assertJsonMissingPath('0.members.0.left_at')->assertJsonMissingPath('0.members.1.left_at');
+        $response->assertJsonMissingPath('members.0.left_at')->assertJsonMissingPath('members.1.left_at');
     }
 
     public function test_members_forbids_user_who_left_with_403(): void
