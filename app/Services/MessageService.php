@@ -163,7 +163,6 @@ class MessageService
     
     private function loadReactions(Message $message): Message
     {
-        return $message->load(['likedUsers', 'dislikedUsers'])
-            ->loadCount(['likedUsers', 'dislikedUsers']);
+        return $message->load(['likedUsers', 'dislikedUsers']);
     }
 }

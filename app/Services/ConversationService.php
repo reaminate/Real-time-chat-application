@@ -198,7 +198,7 @@ class ConversationService
             $conversation->load('createdBy');
         }
         // load messages regardless
-        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user', 'attachments')]);
+        $conversation->load(['messages' => fn ($q) => $q->latest()->with('user', 'attachments', 'reactedUsers')]);
         $member = $conversation->conversationMembers()->where('user_id', $request->user()->__get('id'))->first();
         $unreaMessages = $conversation->messages()
             ->when($member->last_read_id, fn ($q) => $q->where('id', '>', $member->last_read_id))

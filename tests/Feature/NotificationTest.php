@@ -43,7 +43,7 @@ class NotificationTest extends TestCase
         ])->assertCreated();
         //tagging
         $this->postJson("/api/notify/{$other->friend_id}/in/{$conversation->id}")->assertNoContent();
-        //
+        //liking
         $this->post("/api/message/{$original->id}/like")->assertOk();
         Sanctum::actingAs($other);
         $this->assertCount(3, $other->unreadNotifications);
