@@ -36,5 +36,14 @@ class AppServiceProvider extends ServiceProvider
                     ], 429, $headers)
                 );
         });
+        RateLimiter::for('user', function(Request $request){
+            return Limit::perMinute(5)
+                ->by($request->user()?->id ?: $request->ip())
+                ->response(fn(Request $request, array $headers) =>
+                    response()->json([
+                        'message' => 'too many update requests'
+                    ], 429, $headers)
+                );
+        });
     }
 }

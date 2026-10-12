@@ -45,7 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/restore', 'restore')->withTrashed();
         Route::delete('/force_delete', 'forceDelete')->withTrashed();
     });
-    Route::apiResource('/user', UserController::class)->except('store');
+    Route::apiResource('/user', UserController::class)->middlewareFor('update', 'throttle:user')->except('store');
     Route::apiResource('/conversation', ConversationController::class)->except('show');
     Route::apiResource('/message', MessageController::class);
 });

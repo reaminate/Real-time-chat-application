@@ -37,7 +37,7 @@ class AuthService
         $this->storeAvatarFor($request, $user);
         $user->load('avatar');
 
-        $token = $user->createToken('usertoken')->plainTextToken;
+        $token = $user->createToken('usertoken', ['*'], now()->addWeek())->plainTextToken;
         $data = [];
         $data['token'] = $token;
         $data['user'] = $user;

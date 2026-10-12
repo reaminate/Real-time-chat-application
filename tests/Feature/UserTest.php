@@ -133,6 +133,29 @@ class UserTest extends TestCase
         $this->assertSame('Original', $other->fresh()->name);
     }
 
+    private function exhaustUserUpdateLimit(User $user): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->putJson("/api/user/{$user->friend_id}")->assertOk();
+        }
+    }
+
+    public function test_user_update_are_throttled_after_5_per_minute_and_resets(): void
+    {
+        $me = User::factory()->create();
+        Sanctum::actingAs($me);
+
+        $this->exhaustUserUpdateLimit($me);
+
+        $this->putJson("/api/user/{$me->friend_id}")
+            ->assertTooManyRequests()
+            ->assertJsonPath('message', 'too many update requests')
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Remaining', 0);
+        $this->travel(61)->seconds();
+
+        $this->putJson("/api/user/{$me->friend_id}")->assertOk();
+    }
     public function test_destroy_deletes_own_account_with_204(): void
     {
         $me = User::factory()->create();
