@@ -16,6 +16,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "infection/infection": "^0.35.6",
         "laravel/boost": "^2.10",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
@@ -82,6 +83,7 @@
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {
+            "infection/extension-installer": true,
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
         }
